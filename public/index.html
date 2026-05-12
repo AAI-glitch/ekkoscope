@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Ekkoscope – Premium Video Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#040712;--surface:rgba(15,20,40,0.65);--surface-hover:rgba(25,30,50,0.85);
+      --border:rgba(99,102,241,0.2);--border-light:rgba(99,102,241,0.35);
+      --accent:#6366f1;--accent2:#f43f5e;--green:#10b981;--text:#e2e8f0;--muted:#94a3b8;--radius:16px;
+    }
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0;overflow-x:hidden}
+    body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 20% 20%,rgba(99,102,241,0.15) 0%,transparent 60%),radial-gradient(ellipse 60% 80% at 80% 80%,rgba(244,63,94,0.12) 0%,transparent 60%);pointer-events:none;z-index:0}
+    
+    /* Header */
+    .header{position:relative;z-index:10;width:100%;max-width:900px;display:flex;justify-content:space-between;align-items:center;padding:24px 20px;margin-bottom:20px}
+    .logo{display:flex;align-items:center;gap:12px}
+    .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(99,102,241,0.3)}
+    .logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .logo-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#f9a8d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    
+    .auth-box{display:flex;gap:12px;align-items:center;background:rgba(0,0,0,0.2);border:1px solid var(--border);padding:6px 14px;border-radius:30px;backdrop-filter:blur(10px)}
+    .auth-email{font-size:12px;color:var(--muted);font-weight:500}
+       .main-wrap{position:relative;z-index:1;width:100%;max-width:600px;padding:0 20px;margin: 0 auto 40px auto;}
+    
+    .table-wrap{position:relative;z-index:1;width:100%;max-width:1400px;padding:0 20px;margin: 0 auto 60px auto;}
+    
+    /* Card Standard */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,0.4);transition:transform 0.3s ease, box-shadow 0.3s ease}
+    .card:hover{transform:translateY(-5px);box-shadow:0 35px 70px rgba(99,102,241,0.2)}
+    
+    .section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px}
+    .url-input{width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:12px;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:20px}
+    .url-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15);background:rgba(0,0,0,0.6)}
+    .url-input::placeholder{color:var(--muted)}
+    
+    .clip-row{display:flex;gap:12px;margin-bottom:20px}
+    .clip-field{flex:1}
+    .clip-input{width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:all .2s;text-align:center}
+    .clip-input:focus{border-color:var(--accent2);background:rgba(0,0,0,0.6)}
+    .clip-input::placeholder{color:var(--muted)}
+    .clip-label{font-size:11px;color:var(--muted);margin-bottom:6px;display:block}
+    
+    .btn-row{display:flex;gap:12px;flex-direction:column}
+    @media(min-width:480px){ .btn-row{flex-direction:row;} }
+    
+    .btn{flex:1;padding:14px;border:none;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;transition:all .2s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn-full{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 20px rgba(79,70,229,0.4)}
+    .btn-full:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(79,70,229,0.5)}
+    .btn-clip{background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;box-shadow:0 4px 20px rgba(244,63,94,0.35)}
+    .btn-clip:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(244,63,94,0.5)}
+    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+    .btn-ghost:hover{background:rgba(255,255,255,0.05)}
+    .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;border-radius:20px}
+    .btn:active{transform:translateY(0)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+    
+    .free-banner{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#6ee7b7;margin-bottom:20px;display:flex;gap:8px;align-items:center}
+    .free-banner svg{flex-shrink:0;width:14px;height:14px;stroke:#10b981;fill:none;stroke-width:2}
+    
+    /* Dashboard Table */
+    .dashboard-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,0.4)}
+    .dash-toolbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.4)}
+    .dash-title{font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px}
+    .table-container{overflow-x:auto}
+    .custom-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left;min-width:900px}
+    .custom-table th{background:rgba(0,0,0,0.3);padding:14px 20px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+    .custom-table td{padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:middle;color:var(--text)}
+    .custom-table tr:hover td{background:rgba(255,255,255,0.02)}
+    
+    .td-thumb img{width:80px;height:50px;border-radius:6px;object-fit:cover;background:#1a1a1a;display:block;border:1px solid rgba(255,255,255,0.1)}
+    .td-thumb .no-thumb{width:80px;height:50px;border-radius:6px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);border:1px solid rgba(255,255,255,0.1)}
+    
+    .action-play{color:#f97316;display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:600;font-size:13px;cursor:pointer;background:none;border:none;transition:color .2s}
+    .action-play:hover{color:#fdba74}
+    
+    .status-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%}
+    .status-icon.success{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
+    .status-icon.error{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+    .status-icon.pending{background:rgba(234,179,8,0.15);color:#eab308;animation:pulse 2s infinite;border:1px solid rgba(234,179,8,0.3)}
+    
+    .table-url{color:#f97316;text-decoration:none;display:inline-flex;align-items:center;gap:4px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+    .table-url:hover{text-decoration:underline}
+    
+    .timer-badge{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+    .timer-expired{color:#fca5a5}
+    
+    /* Modals */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(10px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+    .modal-overlay.open{display:flex}
+    .modal{background:linear-gradient(135deg,#0f1629,#1a0a2e);border:1px solid rgba(99,102,241,0.3);border-radius:20px;padding:36px;max-width:440px;width:100%;text-align:center;box-shadow:0 40px 80px rgba(0,0,0,0.7)}
+    .modal h2{font-size:22px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#f9a8d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+    .modal p{color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.6}
+    .modal-cta{width:100%;padding:14px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s;margin-bottom:10px}
+    .modal-cta:hover{transform:translateY(-2px)}
+    .modal-close{font-size:12px;color:var(--muted);cursor:pointer;background:none;border:none}
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse{0%{opacity:1}50%{opacity:0.5}100%{opacity:1}}
+  </style> }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    </div>
+    <span class="logo-text">Ekkoscope</span>
+  </div>
+  <div class="auth-box" id="auth-box">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<div class="main-wrap">
+  <!-- Downloader Form -->
+  <div class="card" style="height: fit-content;">
+    <div class="free-banner" id="free-banner">
+      <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span id="free-text">Loading...</span>
+    </div>
+
+    <div class="section-title">Video Page URL</div>
+    <input id="url-input" class="url-input" type="url" placeholder="https://recu.me/username/video/148066200/play"/>
+
+    <div class="section-title">Clip Range <span style="color:#64748b;font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
+    <div class="clip-row">
+      <div class="clip-field">
+        <span class="clip-label">Start Time</span>
+        <input id="clip-start" class="clip-input" type="text" placeholder="HH:MM:SS"/>
+      </div>
+      <div class="clip-field">
+        <span class="clip-label">End Time</span>
+        <input id="clip-end" class="clip-input" type="text" placeholder="HH:MM:SS"/>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-full" class="btn btn-full">⚡ DOWNLOAD FULL</button>
+      <button id="btn-clip" class="btn btn-clip">✂️ CLIP &amp; DOWNLOAD</button>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <div class="dashboard-panel">
+    <div class="dash-toolbar">
+      <div class="dash-title">
+        <svg style="width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+        My Downloads
+      </div>
+      <button class="btn btn-ghost btn-sm" style="padding:6px 12px;font-size:12px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05)" onclick="loadHistory()">↻ Refresh</button>
+    </div>
+    <div class="table-container">
+      <table class="custom-table" id="dash-list">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Thumbnail</th>
+            <th>Action</th>
+            <th style="text-align:center">Status</th>
+            <th>Message</th>
+            <th>ETA / Remaining</th>
+            <th>Initiated</th>
+            <th>Video Link</th>
+            <th>Length</th>
+          </tr>
+        </thead>
+        <tbody id="dash-tbody">
+          <tr>
+            <td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Log in to view your downloads.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Paywall Modal -->
+<div class="modal-overlay" id="paywall-modal">
+  <div class="modal">
+    <div style="font-size:48px;margin-bottom:16px">🔒</div>
+    <h2>Unlock Ekkoscope</h2>
+    <p>You've used your free tier. Pay once to unlock this session.</p>
+    <div style="font-size:40px;font-weight:800;color:#fff;margin-bottom:4px">$4.99</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:24px">per session · BTC / ETH / USDT / SOL accepted</div>
+    <input id="bypass-input" class="url-input" type="text" placeholder="Enter bypass code..." style="text-align:center"/>
+    <button class="modal-cta" id="bypass-btn">Apply Code</button>
+    <button class="modal-close" id="paywall-close" style="margin-top:10px">Cancel</button>
+  </div>
+</div>
+
+<!-- Start Modal -->
+<div class="modal-overlay" id="start-modal">
+  <div class="modal">
+    <div style="font-size:48px;margin-bottom:16px">🚀</div>
+    <h2>Download Request</h2>
+    <p id="start-msg-text">Your video will be downloaded in a few minutes.</p>
+    <div style="margin-bottom:24px;display:flex;align-items:center;gap:10px;justify-content:center;">
+      <input type="checkbox" id="notify-email-cb" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;"/>
+      <label for="notify-email-cb" style="color:var(--text);font-size:14px;cursor:pointer;">Email me when video is ready</label>
+    </div>
+    <button class="modal-cta" id="start-confirm-btn">Confirm & Start Download</button>
+    <button class="modal-close" onclick="document.getElementById('start-modal').classList.remove('open')" style="margin-top:10px">Cancel</button>
+  </div>
+</div>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal" style="max-width:380px;padding:32px 24px">
+    <h2 id="auth-title">Welcome Back</h2>
+    <p id="auth-sub">Log in to track your downloads.</p>
+    
+    <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID_HERE" data-context="signin" data-ux_mode="popup" data-callback="handleGoogleCredential" data-auto_prompt="false"></div>
+    <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left" style="margin-bottom:16px;display:flex;justify-content:center;"></div>
+    
+    <div style="font-size:12px; color:var(--muted); margin-bottom:16px;">— OR —</div>
+    <input id="auth-email" class="url-input" type="email" placeholder="Email" style="margin-bottom:10px;"/>
+    <input id="auth-password" class="url-input" type="password" placeholder="Password" style="margin-bottom:20px;"/>
+    
+    <button class="modal-cta" id="auth-submit-btn">Log In</button>
+    <button class="modal-close" id="auth-switch-btn" style="margin-top:10px;display:block;width:100%">Need an account? Register</button>
+    <button class="modal-close" onclick="document.getElementById('auth-modal').classList.remove('open')" style="margin-top:20px">Cancel</button>
+  </div>
+</div>
+
+<script>
+let currentJobId = null, pendingRequest = null;
+let activeJobs = {}; // track SSE states
+const token = () => localStorage.getItem('ekko_token');
+
+// Utility Functions
+const fmt = (s) => {
+  if (s == null) return '--:--';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+  return h > 0 ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+};
+const parseHMS = (str) => {
+  if (!str) return null;
+  const p = str.split(':').map(Number);
+  if (p.some(isNaN)) return null;
+  if (p.length === 3) return p[0]*3600+p[1]*60+p[2];
+  if (p.length === 2) return p[0]*60+p[1];
+  return p[0];
+};
+const autoFmt = (e) => {
+  let v = e.target.value.replace(/\D/g,'');
+  if (v.length > 4) v = v.slice(0,2)+':'+v.slice(2,4)+':'+v.slice(4,6);
+  else if (v.length > 2) v = v.slice(0,2)+':'+v.slice(2,4);
+  e.target.value = v;
+};
+document.getElementById('clip-start').addEventListener('input', autoFmt);
+document.getElementById('clip-end').addEventListener('input', autoFmt);
+
+const STATUS_LABELS = { queued:'Queued', launching:'Browser', logging_in:'Auth', navigating:'Loading', stealing:'Stealing', downloading:'Downloading', remuxing:'Converting', complete:'Done', error:'Error', refreshing_session:'Auth Refresh' };
+const STATUS_CLASSES = { stealing:'stealing', downloading:'stealing', remuxing:'remuxing', complete:'complete', error:'error' };
+
+// UI Initialization
+let globalStartMsg = "Your video will be downloaded in a few minutes.";
+
+async function loadFreeTier() {
+  try {
+    const d = await fetch('/api/free-tier').then(r=>r.json());
+    const banner = document.getElementById('free-banner');
+    const txt = document.getElementById('free-text');
+    if (d.fullRemaining > 0 || d.clipRemaining > 0) {
+      txt.innerHTML = `🎁 Free tier: <b>${d.fullRemaining} full</b> (≤${d.freeFullMaxMin}m) &amp; <b>${d.clipRemaining} clip</b> (≤${d.freeClipMaxMin}m)`;
+    } else {
+      banner.style.cssText += ';background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.2);color:#fca5a5';
+      banner.querySelector('svg').style.stroke = '#ef4444';
+      txt.innerHTML = '🔒 Free tier exhausted';
+    }
+    if (d.downloadStartMsg) globalStartMsg = d.downloadStartMsg;
+  } catch(e) {}
+}
+loadFreeTier();
+
+function renderAuthBox() {
+  const email = localStorage.getItem('ekko_email');
+  const box = document.getElementById('auth-box');
+  if (token() && email) {
+    box.innerHTML = `
+      <span class="auth-email">${email}</span>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Log out</button>
+    `;
+    loadHistory();
+  } else {
+    box.innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="openAuthModal('login')">Log In</button>
+      <button class="btn btn-full btn-sm" style="background:linear-gradient(135deg,#f43f5e,#e11d48);box-shadow:0 4px 15px rgba(244,63,94,0.3)" onclick="openAuthModal('register')">Register</button>
+    `;
+    document.getElementById('dash-list').innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 20px;background:var(--surface);border-radius:14px;border:1px solid var(--border)">Log in to view your downloads.</div>`;
+  }
+}
+
+// History & Queue Rendering
+async function loadHistory() {
+  if (!token()) return;
+  try {
+    const res = await fetch('/api/history', { headers: { 'Authorization': `Bearer ${token()}` }});
+    if (res.status === 401 || res.status === 403) return logout();
+    const history = await res.json();
+    renderDashboard(history);
+  } catch(e) {}
+}
+
+let lastRenderedState = '';
+let currentDashboardData = { history: [], backlog: [], failedMsg: 'The download failed now but will resume shortly.' };
+
+function renderDashboard(data) {
+  currentDashboardData = data;
+  const history = data.history || [];
+  const backlog = data.backlog || [];
+  const serverActive = data.activeJobs || [];
+  
+  // Sync server active jobs with local activeJobs to resume SSE on refresh
+  serverActive.forEach(sj => {
+    if (!activeJobs[sj.id]) {
+      activeJobs[sj.id] = { ...sj };
+      // Reconnect SSE for this job
+      const es = new EventSource('/api/progress/'+sj.id);
+      es.onmessage = (e) => handleSSE(sj.id, e.data, es);
+      es.onerror = () => { es.close(); loadFreeTier(); };
+    }
+  });
+
+  lastRenderedState = JSON.stringify(history.map(h=>h.id).concat(backlog.map(b=>b.id)).concat(serverActive.map(s=>s.id)));
+  const failedMsg = data.failedMsg || "The download failed now but will resume shortly and we will let you know when your video is ready.";
+  const tbody = document.getElementById('dash-tbody');
+  
+  if (history.length === 0 && backlog.length === 0 && Object.keys(activeJobs).length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">No downloads yet. Start one above!</td></tr>`;
+    return;
+  }
+  
+  let html = '';
+  let index = 1;
+  
+  const getPlayIcon = () => `<svg style="width:14px;height:14px;fill:currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+  const getSuccessIcon = () => `<div class="status-icon success"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>`;
+  const getErrorIcon = () => `<div class="status-icon error"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></div>`;
+  const getPendingIcon = () => `<div class="status-icon pending"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg></div>`;
+  const getOpenIcon = () => `<svg style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;margin-right:4px" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>`;
+
+  // Render active jobs
+  for (const [jobId, job] of Object.entries(activeJobs)) {
+    let statIcon = job.error ? getErrorIcon() : getPendingIcon();
+    let msgHtml = job.error ? `<span style="color:#ef4444">${job.error}</span><br/><span style="font-size:11px;color:var(--muted)">${failedMsg}</span>` : `<span id="txt-${jobId}">${job.progress||0}% • ${job.chunksStolen||0} Chunks</span>`;
+    if (job.status === 'complete') { statIcon = getSuccessIcon(); msgHtml = `<span style="color:#10b981">Download successful!</span>`; }
+
+    html += `
+      <tr id="job-${jobId}">
+        <td style="color:var(--muted)">${index++}</td>
+        <td class="td-thumb"><img src="/api/thumbnail/${jobId}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>PREVIEW</div>'"/></td>
+        <td id="act-${jobId}">
+          ${job.error 
+            ? `<button id="backlog-btn-${jobId}" class="action-play" style="color:#eab308" onclick="addToBacklog('${jobId}')">${getPlayIcon()} Auto-Retry</button>` 
+            : `<span style="color:var(--muted);font-size:12px">Processing...</span>`}
+        </td>
+        <td style="text-align:center" id="stat-${jobId}">${statIcon}</td>
+        <td id="msg-${jobId}">${msgHtml}</td>
+        <td id="eta-${jobId}">${job.eta>=0 ? fmt(job.eta) : '...'}</td>
+        <td style="white-space:nowrap;color:var(--muted)">${new Date(job.startTime).toLocaleString()}</td>
+        <td><a href="${job.url}" target="_blank" class="table-url">${getOpenIcon()} Open</a></td>
+        <td style="color:var(--muted)">Pending</td>
+      </tr>
+    `;
+  }
+
+  const now = Date.now();
+  const maxAgeMs = 24 * 60 * 60 * 1000;
+
+  // Render backlog
+  backlog.forEach(item => {
+    if (activeJobs[item.id]) return;
+    html += `
+      <tr>
+        <td style="color:var(--muted)">${index++}</td>
+        <td class="td-thumb"><div class="no-thumb" style="border-color:rgba(244,63,94,0.3);color:#fda4af;background:rgba(244,63,94,0.05)">RETRYING</div></td>
+        <td><span style="color:var(--muted);font-size:12px">Pending...</span></td>
+        <td style="text-align:center">${getErrorIcon()}</td>
+        <td><span style="color:#fda4af">Pending Auto-Retry</span><br/><span style="font-size:11px;color:var(--muted)">${failedMsg}</span></td>
+        <td style="color:var(--muted)">Waiting...</td>
+        <td style="white-space:nowrap;color:var(--muted)">${new Date(item.created_at).toLocaleString()}</td>
+        <td><a href="${item.video_url}" target="_blank" class="table-url">${getOpenIcon()} Open</a></td>
+        <td style="color:var(--muted)">${item.duration ? fmt(item.duration) : 'Pending'}</td>
+      </tr>
+    `;
+  });
+
+  // Render history
+  history.forEach(item => {
+    if (activeJobs[item.id]) return;
+    
+    const createdAtMs = new Date(item.created_at).getTime();
+    const ageMs = now - createdAtMs;
+    const timeLeftMs = maxAgeMs - ageMs;
+    let isExpired = false;
+    let timerHtml = '';
+    
+    if (item.uploaded_url) {
+      timerHtml = `<span style="color:#10b981">☁️ Saved</span>`;
+    } else if (timeLeftMs > 0) {
+      const h = Math.floor(timeLeftMs / 3600000);
+      const m = Math.floor((timeLeftMs % 3600000) / 60000);
+      timerHtml = `<span class="timer-badge">⏳ ${h}h ${m}m left</span>`;
+    } else {
+      isExpired = true;
+      timerHtml = `<span class="timer-badge timer-expired">Expired</span>`;
+    }
+
+    let actionHtml = '';
+    if (item.uploaded_url) {
+      actionHtml = `<a href="${item.uploaded_url}" target="_blank" class="action-play" style="color:#60a5fa">${getPlayIcon()} Cloud Link</a>`;
+    } else if (!isExpired) {
+      actionHtml = `
+        <a href="/api/download/${item.id}" class="action-play">${getPlayIcon()} Play</a>
+        <br/><button class="action-play" style="color:#60a5fa;margin-top:8px" onclick="uploadToCloud('${item.id}', this)">☁️ Upload</button>
+      `;
+    } else {
+      actionHtml = `<span style="color:var(--muted)">Unavailable</span>`;
+    }
+
+    html += `
+      <tr>
+        <td style="color:var(--muted)">${index++}</td>
+        <td class="td-thumb"><img src="/api/thumbnail/${item.id}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>PREVIEW</div>'"/></td>
+        <td>${actionHtml}</td>
+        <td style="text-align:center">${getSuccessIcon()}</td>
+        <td><span style="color:#10b981">Download successful!</span></td>
+        <td>${timerHtml}</td>
+        <td style="white-space:nowrap;color:var(--muted)">${new Date(item.created_at).toLocaleString()}</td>
+        <td><a href="${item.video_url}" target="_blank" class="table-url">${getOpenIcon()} Open</a></td>
+        <td style="color:var(--muted)">${item.duration ? fmt(item.duration) : (item.is_clip ? 'Clip' : 'Full')}</td>
+      </tr>
+    `;
+  });
+  
+  tbody.innerHTML = html;
+}
+
+// Auto-refresh history every minute to update timers
+setInterval(() => {
+  if (token() && document.visibilityState === 'visible') loadHistory();
+}, 60000);
+
+async function uploadToCloud(jobId, btnElement) {
+  btnElement.innerHTML = '⏳ Uploading: 0%';
+  btnElement.disabled = true;
+
+  try {
+    const res = await fetch(`/api/upload/${jobId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token()}` }
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const interval = setInterval(async () => {
+      try {
+        const stRes = await fetch(`/api/upload-status/${jobId}`, {
+          headers: { 'Authorization': `Bearer ${token()}` }
+        });
+        const stData = await stRes.json();
+        
+        if (stData.error) {
+          clearInterval(interval);
+          alert(stData.error);
+          btnElement.innerHTML = '☁️ Upload to Cloud';
+          btnElement.disabled = false;
+          return;
+        }
+
+        if (stData.status === 'uploading') {
+          btnElement.innerHTML = '⏳ Uploading: ' + (stData.progress || 0) + '%';
+        } else if (stData.status === 'complete') {
+          clearInterval(interval);
+          btnElement.outerHTML = `<a href="${stData.url}" target="_blank" class="action-play" style="color:#60a5fa"><svg style="width:14px;height:14px;fill:currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Cloud Link</a>`;
+          loadHistory(); // refresh to show saved badge
+        } else if (stData.status === 'error') {
+          clearInterval(interval);
+          alert('Upload Error: ' + stData.error);
+          btnElement.innerHTML = '☁️ Upload to Cloud';
+          btnElement.disabled = false;
+        }
+      } catch(e) {
+        // ignore network hiccups while polling
+      }
+    }, 1000);
+
+  } catch (err) {
+    alert(err.message);
+    btnElement.innerHTML = '☁️ Upload to Cloud';
+    btnElement.disabled = false;
+  }
+}
+
+// Download Logic
+function setBtnsDisabled(d) {
+  document.getElementById('btn-full').disabled = d;
+  document.getElementById('btn-clip').disabled = d;
+}
+
+async function addToBacklog(jobId) {
+  const job = activeJobs[jobId];
+  if (!job) return;
+  const btn = document.getElementById('backlog-btn-'+jobId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+  
+  try {
+    const res = await fetch('/api/backlog/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify({ url: job.url, clipMode: job.clipMode, clipStart: job.clipStart, clipEnd: job.clipEnd })
+    });
+    if (res.ok) {
+      if (btn) { btn.textContent = '✅ Added to Backlog'; }
+      delete activeJobs[jobId];
+      loadHistory();
+    } else {
+      alert('Failed to add to backlog');
+      if (btn) { btn.disabled = false; btn.textContent = 'Try Again'; }
+    }
+  } catch (err) {
+    alert('Network error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Try Again'; }
+  }
+}
+
+async function startJob(clipMode, bypassCode) {
+  if (!token()) return openAuthModal('login');
+  
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) return alert('Please enter a video URL.');
+  if (!url.includes('recu.me')) return alert('Please enter a recu.me video page URL.');
+
+  let clipStart = null, clipEnd = null;
+  if (clipMode) {
+    clipStart = parseHMS(document.getElementById('clip-start').value);
+    clipEnd   = parseHMS(document.getElementById('clip-end').value);
+    if (clipStart === null || clipEnd === null || clipStart >= clipEnd) return alert('Valid clip times required.');
+  }
+
+  setBtnsDisabled(true);
+  
+  // Show confirmation modal first
+  document.getElementById('start-msg-text').textContent = globalStartMsg;
+  document.getElementById('start-modal').classList.add('open');
+  
+  document.getElementById('start-confirm-btn').onclick = async () => {
+    document.getElementById('start-modal').classList.remove('open');
+    const notifyEmail = document.getElementById('notify-email-cb').checked;
+    const body = { url, clipMode, clipStart, clipEnd, notifyEmail };
+    if (bypassCode) body.bypassCode = bypassCode;
+  
+    const res = await fetch('/api/start', {
+      method:'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token()}` },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+  
+    if (res.status === 402 || data.error === 'paywall') {
+      setBtnsDisabled(false);
+      pendingRequest = { clipMode };
+      document.getElementById('paywall-modal').classList.add('open');
+      return;
+    }
+    if (!res.ok) {
+      alert(data.error || 'Server error');
+      setBtnsDisabled(false);
+      return;
+    }
+  
+    // Setup active job in UI
+    activeJobs[data.jobId] = { id: data.jobId, url, clipMode, clipStart, clipEnd, status: 'queued', progress: 0 };
+    loadHistory(); // Re-render to show queue item
+  
+    const es = new EventSource('/api/progress/'+data.jobId);
+    es.onmessage = (e) => handleSSE(data.jobId, e.data, es);
+    es.onerror = () => { es.close(); setBtnsDisabled(false); };
+  };
+  
+  // If user cancels modal, re-enable buttons
+  document.getElementById('start-modal').querySelector('.modal-close').onclick = () => {
+    document.getElementById('start-modal').classList.remove('open');
+    setBtnsDisabled(false);
+  };
+}
+
+function handleSSE(jobId, jsonData, es) {
+  const d = JSON.parse(jsonData);
+  const prevStatus = activeJobs[jobId]?.status;
+  activeJobs[jobId] = { ...activeJobs[jobId], ...d };
+  
+  // Quick update for progress
+  const txtEl = document.getElementById('txt-'+jobId);
+  if (txtEl && !d.error && d.status !== 'complete') {
+    txtEl.textContent = `${d.progress||0}% • ${d.chunksStolen||0} Chunks`;
+  }
+  const etaEl = document.getElementById('eta-'+jobId);
+  if (etaEl && !d.error && d.status !== 'complete') {
+    etaEl.textContent = d.eta>=0 ? fmt(d.eta) : '...';
+  }
+
+  // Trigger full render if status or error state changes
+  if (prevStatus !== d.status || d.error) {
+    renderDashboard(currentDashboardData);
+  }
+
+  if (d.status === 'complete' || d.status === 'error') {
+    es.close();
+    setBtnsDisabled(false);
+    loadFreeTier();
+    if (d.status === 'complete') {
+      delete activeJobs[jobId]; 
+      loadHistory(); // refresh history fully to pick up the row
+    }
+  }
+}
+
+document.getElementById('btn-full').onclick = () => startJob(false);
+document.getElementById('btn-clip').onclick  = () => startJob(true);
+
+document.getElementById('paywall-close').onclick = () => document.getElementById('paywall-modal').classList.remove('open');
+document.getElementById('bypass-btn').onclick = async () => {
+  const code = document.getElementById('bypass-input').value.trim();
+  if (!code) return alert('Enter a bypass code.');
+  document.getElementById('paywall-modal').classList.remove('open');
+  if (pendingRequest) await startJob(pendingRequest.clipMode, code);
+};
+
+// --- Auth Logic ---
+let authMode = 'login';
+function openAuthModal(mode) {
+  authMode = mode;
+  document.getElementById('auth-title').textContent = mode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('auth-sub').textContent = mode === 'login' ? 'Log in to track your downloads.' : 'Sign up to keep your download history.';
+  document.getElementById('auth-submit-btn').textContent = mode === 'login' ? 'Log In' : 'Register';
+  document.getElementById('auth-switch-btn').textContent = mode === 'login' ? 'Need an account? Register' : 'Have an account? Log In';
+  document.getElementById('auth-modal').classList.add('open');
+}
+
+document.getElementById('auth-switch-btn').onclick = () => openAuthModal(authMode === 'login' ? 'register' : 'login');
+
+document.getElementById('auth-submit-btn').onclick = async () => {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) return alert('Email and password required');
+
+  try {
+    const res = await fetch(authMode === 'login' ? '/api/auth/login' : '/api/auth/register', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      localStorage.setItem('ekko_token', data.token);
+      localStorage.setItem('ekko_email', data.email);
+      document.getElementById('auth-modal').classList.remove('open');
+      renderAuthBox();
+    } else alert(data.error || 'Authentication failed');
+  } catch(e) { alert('Network error'); }
+};
+
+function handleGoogleCredential(response) {
+  fetch('/api/auth/google', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ credential: response.credential })
+  }).then(r => r.json()).then(data => {
+    if (data.token) {
+      localStorage.setItem('ekko_token', data.token);
+      localStorage.setItem('ekko_email', data.email);
+      document.getElementById('auth-modal').classList.remove('open');
+      renderAuthBox();
+    } else alert(data.error || 'Google login failed');
+  });
+}
+
+function logout() {
+  localStorage.removeItem('ekko_token');
+  localStorage.removeItem('ekko_email');
+  activeJobs = {};
+  renderAuthBox();
+}
+
+// Gentle background polling for completed backlog jobs
+setInterval(async () => {
+  if (!token() || Object.keys(activeJobs).length > 0) return; // Prevent UI flicker if active jobs exist
+  try {
+    const res = await fetch('/api/history', { headers: { 'Authorization': `Bearer ${token()}` }});
+    if (res.ok) {
+       const data = await res.json();
+       const h = data.history || [];
+       const b = data.backlog || [];
+       const newState = JSON.stringify(h.map(i=>i.id).concat(b.map(i=>i.id)));
+       if (newState !== lastRenderedState) {
+         renderDashboard(data);
+       }
+    }
+  } catch(e) {}
+}, 15000);
+
+renderAuthBox();
+</script>
+</body>
+</html>

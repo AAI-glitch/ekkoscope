@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Ekkoscope — Admin Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#040712;--surface:rgba(15,20,40,0.85);--border:rgba(99,102,241,0.2);--accent:#6366f1;--green:#10b981;--red:#f43f5e;--text:#e2e8f0;--muted:#64748b}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 50% at 30% 30%,rgba(99,102,241,0.1) 0%,transparent 60%);pointer-events:none}
+
+    .container{position:relative;z-index:1;width:100%;max-width:1400px}
+    #login-screen{max-width:500px;margin:0 auto;}
+
+    .logo{display:flex;align-items:center;gap:12px;margin-bottom:32px;justify-content:center}
+    .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center}
+    .logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .logo-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .logo-badge{font-size:10px;background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;padding:2px 8px;border-radius:20px;font-weight:700;letter-spacing:1px}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;backdrop-filter:blur(20px);box-shadow:0 20px 50px rgba(0,0,0,0.5);margin-bottom:16px;transition:transform 0.3s ease, box-shadow 0.3s ease;height:100%;display:flex;flex-direction:column}
+    .card:hover{transform:translateY(-4px);box-shadow:0 30px 60px rgba(99,102,241,0.2);}
+    .card-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+    .card-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* Login screen */
+    .field-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:block}
+    .text-input{width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:10px;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s;margin-bottom:14px}
+    .text-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15)}
+    .btn{width:100%;padding:13px;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:0.5px}
+    .btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 20px rgba(79,70,229,0.4)}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 25px rgba(79,70,229,0.5)}
+    .btn-danger{background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;box-shadow:0 4px 20px rgba(244,63,94,0.3)}
+    .btn-sm{padding:7px 14px;font-size:12px;width:auto}
+    .error-msg{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
+
+    /* Admin panel */
+    #admin-panel{display:none}
+    #admin-panel.open{display:grid;grid-template-columns:repeat(auto-fit, minmax(400px, 1fr));gap:24px;align-items:start;}
+    .admin-grid-full{grid-column: 1 / -1;}
+    .creds-row{display:flex;gap:10px}
+    .creds-row .text-input{margin-bottom:0}
+    .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:0}
+    .stat-card{background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+    .stat-num{font-size:28px;font-weight:800;color:#a5b4fc;font-family:'JetBrains Mono',monospace}
+    .stat-lbl{font-size:11px;color:var(--muted);margin-top:4px}
+    
+    .table-container{overflow-x:auto;width:100%}
+    .custom-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left;}
+    .custom-table th{background:rgba(0,0,0,0.3);padding:12px 16px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+    .custom-table td{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:middle;color:var(--text);font-family:'JetBrains Mono',monospace;word-break:break-all}
+    .custom-table tr:hover td{background:rgba(255,255,255,0.02)}
+    
+    .pill{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;display:inline-block;letter-spacing:0.5px}
+    .pill-blue{background:rgba(99,102,241,0.2);color:#a5b4fc}
+    .pill-green{background:rgba(16,185,129,0.2);color:#6ee7b7}
+    .pill-red{background:rgba(239,68,68,0.2);color:#fca5a5}
+    .pill-yellow{background:rgba(234,179,8,0.2);color:#fde047}
+    .bypass-badge{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--green);letter-spacing:0.5px}
+    .refresh-btn{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none;margin-left:auto;display:flex}
+    .refresh-btn:hover{color:var(--text)}
+    .nav-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin-top:16px;text-decoration:none;transition:color .2s}
+    .nav-link:hover{color:var(--text)}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    </div>
+    <span class="logo-text">Ekkoscope</span>
+    <span class="logo-badge">ADMIN</span>
+  </div>
+
+  <!-- Login -->
+  <div id="login-screen">
+    <div class="card">
+      <div class="card-title">Admin Login</div>
+      <div id="login-error" class="error-msg"></div>
+      <label class="field-label">Admin Password</label>
+      <input id="admin-pass" class="text-input" type="password" placeholder="Enter admin password"/>
+      <button class="btn btn-primary" onclick="doLogin()">🔐 Login</button>
+    </div>
+  </div>
+
+  <!-- Admin panel -->
+  <div id="admin-panel">
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-title">
+        Overview
+        <button class="refresh-btn" onclick="loadStatus()">↻ Refresh</button>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num" id="stat-jobs">-</div><div class="stat-lbl">Active Jobs</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-users">-</div><div class="stat-lbl">Unique IPs</div></div>
+        <div class="stat-card" id="session-stat-card"><div class="stat-num" id="stat-session" style="font-size:18px">-</div><div class="stat-lbl">Session</div></div>
+      </div>
+      <div id="session-detail" style="font-size:12px;color:var(--muted);margin-top:14px;background:rgba(0,0,0,0.2);border-radius:8px;padding:12px;line-height:1.9;display:none">
+        <span id="session-age"></span><br>
+        <span id="session-expires"></span><br>
+        <span id="session-fails"></span>
+      </div>
+      <button class="btn btn-danger btn-sm" id="force-refresh-btn" onclick="forceRefresh()" style="margin-top:12px;display:none">
+        🔄 Force Cookie Refresh Now
+      </button>
+      <div id="refresh-msg" style="font-size:12px;margin-top:8px;display:none"></div>
+    </div>
+
+    <!-- Analytics Section -->
+    <div class="card admin-grid-full">
+      <div class="card-title">Analytics</div>
+      <div class="stat-grid" style="margin-bottom: 20px; grid-template-columns:repeat(2,1fr);">
+        <div class="stat-card"><div class="stat-num" id="stat-total-users">-</div><div class="stat-lbl">Total Users</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-total-downloads">-</div><div class="stat-lbl">Total Downloads</div></div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:24px;">
+        <div class="table-container">
+          <div class="card-title" style="font-size:10px;">Downloads By User</div>
+          <table class="custom-table" id="table-by-user">
+            <thead><tr><th>User</th><th>Downloads</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-container">
+          <div class="card-title" style="font-size:10px;">Downloads By Day</div>
+          <table class="custom-table" id="table-by-day">
+            <thead><tr><th>Date</th><th>Downloads</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Account Credentials -->
+    <div class="card">
+      <div class="card-title">Admin Account <span style="color:#10b981;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— premium recu.me login</span></div>
+      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#6ee7b7;line-height:1.7">
+        🔑 The server will automatically log in with these credentials for every download request.
+      </div>
+      <label class="field-label">recu.me Email</label>
+      <input id="cred-email" class="text-input" type="email" placeholder="your@email.com"/>
+      <label class="field-label">recu.me Password</label>
+      <input id="cred-pass" class="text-input" type="password" placeholder="Your recu.me password"/>
+      <button class="btn btn-primary" onclick="saveCreds()">💾 Save Credentials</button>
+      <div id="cred-status" style="font-size:12px;margin-top:10px;display:none"></div>
+    </div>
+
+    <!-- DoodAPI Configuration -->
+    <div class="card">
+      <div class="card-title">Upload API Configuration <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— doodapi.com</span></div>
+      <label class="field-label">API Key</label>
+      <input id="upload-api-key" class="text-input" type="text" placeholder="Enter DoodAPI Key"/>
+      <button class="btn btn-primary" onclick="saveApiKey()">💾 Save API Key</button>
+      <div id="api-key-status" style="font-size:12px;margin-top:10px;display:none"></div>
+    </div>
+
+    <!-- System Settings (Backlog & Email) -->
+    <div class="card">
+      <div class="card-title">System Settings <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-Retry & Email</span></div>
+      <label class="field-label">Backlog Retry Interval (minutes)</label>
+      <input id="setting-retry-interval" class="text-input" type="number" placeholder="15"/>
+      <div style="display:flex;gap:10px;margin-bottom:0">
+        <div style="flex:1">
+          <label class="field-label">SMTP Host</label>
+          <input id="setting-smtp-host" class="text-input" type="text" placeholder="smtp.gmail.com"/>
+        </div>
+        <div style="flex:1">
+          <label class="field-label">SMTP Port</label>
+          <input id="setting-smtp-port" class="text-input" type="number" placeholder="465"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:0">
+        <div style="flex:1">
+          <label class="field-label">SMTP User</label>
+          <input id="setting-smtp-user" class="text-input" type="text" placeholder="email@gmail.com"/>
+        </div>
+        <div style="flex:1">
+          <label class="field-label">SMTP Password</label>
+          <input id="setting-smtp-pass" class="text-input" type="password" placeholder="App Password"/>
+        </div>
+      </div>
+      <label class="field-label" style="margin-top:10px">Download Start Popup Message</label>
+      <textarea id="setting-download-start-msg" class="text-input" rows="2" placeholder="Your video will be downloaded in a few minutes..." style="resize:vertical"></textarea>
+
+      <label class="field-label" style="margin-top:10px">Failed Download Persistent Message</label>
+      <textarea id="setting-failed-msg" class="text-input" rows="2" placeholder="The download failed now but will resume shortly..." style="resize:vertical"></textarea>
+      
+      <label class="field-label" style="margin-top:10px">Successful Download Email Message</label>
+      <textarea id="setting-success-email-msg" class="text-input" rows="2" placeholder="Your requested video has been successfully downloaded by Ekkoscope." style="resize:vertical"></textarea>
+
+      <button class="btn btn-primary" onclick="saveSystemSettings()" style="margin-top: 10px;">💾 Save System Settings</button>
+      <div id="sys-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
+      
+      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:20px">
+        <button class="btn btn-sm" style="background:rgba(244,63,94,0.1);color:#fca5a5;border:1px solid rgba(244,63,94,0.3)" onclick="window.location.href='/api/admin/backlog/export?token='+adminToken">📥 Download Failed Backlog (CSV)</button>
+      </div>
+    </div>
+
+    <!-- Bypass code -->
+    <div class="card">
+      <div class="card-title">Bypass Code</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Share this code with paying users to bypass the paywall (set in your .env file).</p>
+      <div class="bypass-badge" id="bypass-code-display">Loading...</div>
+    </div>
+
+    <!-- Active jobs -->
+    <div class="card admin-grid-full">
+      <div class="card-title">Active Jobs</div>
+      <div id="jobs-table-wrap" class="table-container">
+        <p style="color:var(--muted);font-size:13px">No active jobs.</p>
+      </div>
+    </div>
+
+    <a href="/" class="nav-link admin-grid-full">← Back to User Page</a>
+  </div>
+</div>
+
+<script>
+let adminToken = null;
+
+async function doLogin() {
+  const pass = document.getElementById('admin-pass').value;
+  const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ password: pass }) });
+  const data = await res.json();
+  if (!res.ok) {
+    const el = document.getElementById('login-error');
+    el.textContent = data.error || 'Login failed';
+    el.style.display = 'block';
+    return;
+  }
+  adminToken = data.token;
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-panel').classList.add('open');
+  loadStatus();
+}
+
+document.getElementById('admin-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function loadStatus() {
+  const res = await fetch('/api/admin/status?token='+adminToken);
+  const data = await res.json();
+  if (!res.ok) { alert('Session expired. Refresh and log in again.'); return; }
+
+  document.getElementById('stat-jobs').textContent  = data.activeJobs.length;
+  document.getElementById('stat-users').textContent = data.totalIPs;
+  document.getElementById('bypass-code-display').textContent = data.bypassCode;
+
+  const sess = data.session;
+  const sessionEl = document.getElementById('stat-session');
+  const cardEl    = document.getElementById('session-stat-card');
+
+  if (!sess.credentialsSet) {
+    sessionEl.textContent = '⚠️ None';
+    cardEl.style.background = 'rgba(239,68,68,0.1)';
+  } else {
+    sessionEl.textContent = sess.email ? `✅` : '✅';
+    cardEl.style.background = 'rgba(16,185,129,0.1)';
+    cardEl.title = sess.email || '';
+  }
+
+  const statusColors = { complete:'pill-green', error:'pill-red', remuxing:'pill-yellow', downloading:'pill-blue', stealing:'pill-blue', refreshing_session:'pill-yellow' };
+  const wrap = document.getElementById('jobs-table-wrap');
+  if (!data.activeJobs.length) {
+    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px">No active jobs.</p>';
+    return;
+  }
+  wrap.innerHTML = `<table class="custom-table">
+    <thead><tr><th>ID</th><th>Status</th><th>Progress</th><th>Mode</th><th>Chunks</th></tr></thead>
+    <tbody>${data.activeJobs.map(j => `
+      <tr>
+        <td>${j.id.slice(0,8)}...</td>
+        <td><span class="pill ${statusColors[j.status]||'pill-blue'}">${j.status}</span></td>
+        <td>${j.progress}%</td>
+        <td>${j.clipMode ? '✂️ Clip' : '⚡ Full'}</td>
+        <td>${j.chunksStolen||0}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+async function forceRefresh() {
+  const btn = document.getElementById('force-refresh-btn');
+  const msg = document.getElementById('refresh-msg');
+  btn.disabled = true;
+  btn.textContent = '🔄 Refreshing...';
+  msg.style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/refresh-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: adminToken })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.style.color = '#6ee7b7';
+      msg.textContent = '✅ Session refreshed! New Cloudflare clearance obtained.';
+    } else {
+      msg.style.color = '#fca5a5';
+      msg.textContent = '❌ Refresh failed: ' + (data.error || 'Unknown error');
+    }
+    msg.style.display = 'block';
+    loadStatus();
+  } catch(e) {
+    msg.style.color = '#fca5a5';
+    msg.textContent = '❌ Network error: ' + e.message;
+    msg.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Force Cookie Refresh Now';
+  }
+}
+
+async function saveCreds() {
+  const email    = document.getElementById('cred-email').value.trim();
+  const password = document.getElementById('cred-pass').value;
+  if (!email || !password) { alert('Please enter both email and password.'); return; }
+  const res  = await fetch('/api/admin/credentials', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ token: adminToken, email, password })
+  });
+  const data = await res.json();
+  const msg  = document.getElementById('cred-status');
+  if (res.ok) {
+    msg.style.color = '#6ee7b7';
+    msg.textContent = '✅ Credentials saved! Server will log in as ' + email + ' for all downloads.';
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 5000);
+    loadStatus();
+  } else {
+    msg.style.color = '#fca5a5';
+    msg.textContent = '❌ ' + (data.error || 'Save failed');
+    msg.style.display = 'block';
+  }
+}
+
+async function loadAnalytics() {
+  const [analyticsRes, settingsRes] = await Promise.all([
+    fetch('/api/admin/analytics?token='+adminToken),
+    fetch('/api/admin/settings?token='+adminToken)
+  ]);
+  if (analyticsRes.ok) {
+    const data = await analyticsRes.json();
+    document.getElementById('stat-total-users').textContent = data.totalUsers;
+    document.getElementById('stat-total-downloads').textContent = data.totalDownloads;
+    document.querySelector('#table-by-user tbody').innerHTML = data.byUser.map(row => `<tr><td>${row.email}</td><td>${row.count}</td></tr>`).join('');
+    document.querySelector('#table-by-day tbody').innerHTML = data.byDay.map(row => `<tr><td>${row.date}</td><td>${row.count}</td></tr>`).join('');
+  }
+  if (settingsRes.ok) {
+    const data = await settingsRes.json();
+    document.getElementById('upload-api-key').value = data.upload_api_key || '';
+    document.getElementById('setting-retry-interval').value = data.retry_interval || '15';
+    document.getElementById('setting-smtp-host').value = data.smtp_host || '';
+    document.getElementById('setting-smtp-port').value = data.smtp_port || '';
+    document.getElementById('setting-smtp-user').value = data.smtp_user || '';
+    document.getElementById('setting-smtp-pass').value = data.smtp_pass || '';
+    document.getElementById('setting-failed-msg').value = data.failed_download_msg || '';
+    document.getElementById('setting-download-start-msg').value = data.download_start_msg || '';
+    document.getElementById('setting-success-email-msg').value = data.success_email_msg || '';
+  }
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('upload-api-key').value.trim();
+  const res = await fetch('/api/admin/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ token: adminToken, upload_api_key: key })
+  });
+  const data = await res.json();
+  const msg = document.getElementById('api-key-status');
+  if (res.ok) {
+    msg.style.color = '#6ee7b7';
+    msg.textContent = '✅ API Key saved!';
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 5000);
+  } else {
+    msg.style.color = '#fca5a5';
+    msg.textContent = '❌ ' + (data.error || 'Save failed');
+    msg.style.display = 'block';
+  }
+}
+
+async function saveSystemSettings() {
+  const retry_interval = document.getElementById('setting-retry-interval').value;
+  const smtp_host = document.getElementById('setting-smtp-host').value;
+  const smtp_port = document.getElementById('setting-smtp-port').value;
+  const smtp_user = document.getElementById('setting-smtp-user').value;
+  const smtp_pass = document.getElementById('setting-smtp-pass').value;
+  const failed_download_msg = document.getElementById('setting-failed-msg').value;
+  const download_start_msg = document.getElementById('setting-download-start-msg').value;
+  const success_email_msg = document.getElementById('setting-success-email-msg').value;
+
+  const res = await fetch('/api/admin/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ token: adminToken, retry_interval, smtp_host, smtp_port, smtp_user, smtp_pass, failed_download_msg, download_start_msg, success_email_msg })
+  });
+  const data = await res.json();
+  const msg = document.getElementById('sys-settings-status');
+  if (res.ok) {
+    msg.style.color = '#6ee7b7';
+    msg.textContent = '✅ System Settings saved!';
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 5000);
+  } else {
+    msg.style.color = '#fca5a5';
+    msg.textContent = '❌ ' + (data.error || 'Save failed');
+    msg.style.display = 'block';
+  }
+}
+
+// Ensure analytics load alongside status
+const originalLoadStatus = loadStatus;
+loadStatus = async function() {
+  await originalLoadStatus();
+  await loadAnalytics();
+};
+
+</script>
+</body>
+</html>

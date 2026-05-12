@@ -1,0 +1,564 @@
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const { startDownload } = require('./downloader');
+const sessionMgr = require('./session-manager');
+const { sendEmail } = require('./mailer');
+
+const app = express();
+app.use(express.json({ limit: '2mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Authentication
+const { router: authRouter, authenticateUser, optionalAuthenticate } = require('./auth');
+app.use('/api/auth', authRouter);
+
+
+// ─── In-memory stores ────────────────────────────────────────────────────────
+const jobs = new Map();
+const uploadJobs = new Map(); // Track upload progress
+const ipUsage = new Map();
+
+const adminConfig = {
+  adminPassword: process.env.ADMIN_PASSWORD || 'admin123'
+};
+
+// Boot with pre-configured cookies from .env if present
+if (process.env.RECU_COOKIES) {
+  sessionMgr.setManualCookies(process.env.RECU_COOKIES);
+}
+
+const FREE_FULL_LIMIT = 1;
+const FREE_FULL_MAX_SECS = 15 * 60;
+const FREE_CLIP_LIMIT = 1;
+const FREE_CLIP_MAX_SECS = 5 * 60;
+const PRICE_USD = process.env.PRICE_USD || '4.99';
+const BYPASS_CODE = process.env.BYPASS_CODE || 'EKKOFREE';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const getIP = (req) => req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+const adminToken = () => Buffer.from(adminConfig.adminPassword).toString('base64');
+
+function broadcast(job) {
+  if (!job.clients) return;
+
+  // Log to history immediately when job completes so it shows up on refresh
+  if (job.status === 'complete' && !job.historyLogged && job.userId) {
+    job.historyLogged = true;
+    try {
+      const db = require('./db');
+      db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, duration) VALUES (?, ?, ?, ?, ?)')
+        .run(job.id, job.userId, job.url, job.clipMode ? 1 : 0, job.duration || null);
+        
+      if (job.notifyEmail && job.userEmail) {
+        const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'success_email_msg'").get();
+        const successMsg = msgSetting?.value || "Your requested video has been successfully downloaded by Ekkoscope.";
+        sendEmail(job.userEmail, 'Your Video Download is Ready!', `${successMsg}\n\nVideo URL: ${job.url}\n\nYou can access it from your dashboard.`);
+      }
+    } catch (e) {
+      console.error('Failed to log history/send email:', e);
+    }
+  }
+
+  const payload = JSON.stringify({
+    status: job.status, progress: job.progress,
+    eta: job.eta, chunksStolen: job.chunksStolen || 0, error: job.error || null
+  });
+  job.clients.forEach(send => send(payload));
+}
+
+// Log session events to console
+sessionMgr.on('updated', () => console.log('[Session] ✅ Cookies refreshed — all downloads will use new session.'));
+sessionMgr.on('error', (msg) => console.error('[Session] ❌ Refresh error:', msg));
+sessionMgr.on('status', (s) => console.log('[Session] Status:', s));
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+
+app.get('/api/free-tier', (req, res) => {
+  const usage = ipUsage.get(getIP(req)) || { fullCount: 0, clipCount: 0 };
+  
+  let downloadStartMsg = "Your video will be downloaded in a few minutes. You can wait or provide an email for notification.";
+  try {
+    const db = require('./db');
+    const s = db.prepare("SELECT value FROM settings WHERE key = 'download_start_msg'").get();
+    if (s && s.value) downloadStartMsg = s.value;
+  } catch(e) {}
+  
+  res.json({
+    fullRemaining: Math.max(0, FREE_FULL_LIMIT - usage.fullCount),
+    clipRemaining: Math.max(0, FREE_CLIP_LIMIT - usage.clipCount),
+    freeFullMaxMin: FREE_FULL_MAX_SECS / 60,
+    freeClipMaxMin: FREE_CLIP_MAX_SECS / 60,
+    downloadStartMsg
+  });
+});
+
+app.post('/api/start', optionalAuthenticate, async (req, res) => {
+  const { url, clipMode, clipStart, clipEnd, bypassCode, notifyEmail } = req.body;
+  const ip = getIP(req);
+
+  if (!url) return res.status(400).json({ error: 'Video URL is required.' });
+  if (!url.includes('recu.me')) return res.status(400).json({ error: 'Please enter a valid recu.me video URL.' });
+
+  const clipDuration = clipMode ? (clipEnd - clipStart) : null;
+  const usage = ipUsage.get(ip) || { fullCount: 0, clipCount: 0 };
+  const bypassed = bypassCode === BYPASS_CODE;
+
+  if (!bypassed) {
+    if (clipMode) {
+      if (clipDuration > FREE_CLIP_MAX_SECS)
+        return res.status(402).json({ error: 'paywall', message: `Free clips limited to ${FREE_CLIP_MAX_SECS / 60} min.` });
+      if (usage.clipCount >= FREE_CLIP_LIMIT)
+        return res.status(402).json({ error: 'paywall', message: 'Free clip tier exhausted.' });
+    } else {
+      if (usage.fullCount >= FREE_FULL_LIMIT)
+        return res.status(402).json({ error: 'paywall', message: 'Free download tier exhausted.' });
+    }
+  }
+
+  if (!bypassed) {
+    if (clipMode) usage.clipCount++; else usage.fullCount++;
+    ipUsage.set(ip, usage);
+  }
+
+  const jobId = uuidv4();
+  const job = {
+    id: jobId, status: 'queued', progress: 0, eta: null,
+    filePath: null, error: null, clients: [],
+    clipMode: !!clipMode, clipStart: clipStart || 0,
+    clipEnd: clipEnd || null, url, startTime: Date.now(), chunksStolen: 0,
+    userId: req.user ? req.user.id : null,
+    notifyEmail: !!notifyEmail,
+    userEmail: req.user ? req.user.email : null
+  };
+  jobs.set(jobId, job);
+
+  // Pass session manager so downloader always has latest cookies
+  startDownload(job, sessionMgr, broadcast).catch(async err => {
+    // If 403/401 error → force cookie refresh and retry once
+    if (err.message.includes('403') || err.message.includes('401') || err.message.includes('expired')) {
+      console.log('[Server] Auth error detected, forcing session refresh and retrying...');
+      job.status = 'refreshing_session';
+      job.error = null;
+      broadcast(job);
+      try {
+        await sessionMgr.forceRefresh();
+        await startDownload(job, sessionMgr, broadcast);
+      } catch (retryErr) {
+        job.status = 'error';
+        job.error = retryErr.message;
+        broadcast(job);
+      }
+    } else {
+      job.status = 'error';
+      job.error = err.message;
+      broadcast(job);
+    }
+  });
+
+  res.json({ jobId });
+});
+
+app.post('/api/backlog/add', authenticateUser, (req, res) => {
+  const { url, clipMode, clipStart, clipEnd } = req.body;
+  if (!url) return res.status(400).json({ error: 'Video URL is required.' });
+
+  try {
+    const db = require('./db');
+    const id = uuidv4();
+    db.prepare(`
+      INSERT INTO backlog (id, user_id, video_url, is_clip, clip_start, clip_end, notify_email)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).run(id, req.user.id, url, clipMode ? 1 : 0, clipStart || null, clipEnd || null);
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add to backlog' });
+  }
+});
+
+app.get('/api/progress/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).send('Job not found');
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (payload) => res.write(`data: ${payload}\n\n`);
+  job.clients.push(send);
+  send(JSON.stringify({ status: job.status, progress: job.progress, eta: job.eta, chunksStolen: job.chunksStolen, error: job.error }));
+  req.on('close', () => { job.clients = job.clients.filter(c => c !== send); });
+});
+
+app.get('/api/download/:jobId', (req, res) => {
+  const jobId = req.params.jobId;
+  const filePath = path.join(__dirname, 'tmp_jobs', jobId, 'output.mp4');
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('File not found or has expired.');
+  }
+
+  // Fetch from DB to know if it's clip or full for the filename
+  let clipMode = false;
+  try {
+    const db = require('./db');
+    const hist = db.prepare('SELECT is_clip FROM history WHERE id = ?').get(jobId);
+    if (hist) clipMode = hist.is_clip;
+  } catch(e) {}
+
+  const filename = `ekkoscope_${clipMode ? 'clip' : 'full'}_${Date.now()}.mp4`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'video/mp4');
+  const stream = fs.createReadStream(filePath);
+  stream.pipe(res);
+});
+
+app.get('/api/thumbnail/:jobId', (req, res) => {
+  const filePath = path.join(__dirname, 'tmp_jobs', req.params.jobId, 'thumb.jpg');
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send('Thumbnail not found');
+  }
+});
+
+app.get('/api/upload-status/:jobId', authenticateUser, (req, res) => {
+  const upJob = uploadJobs.get(req.params.jobId);
+  if (!upJob) return res.status(404).json({ error: 'Not uploading' });
+  res.json(upJob);
+});
+
+async function uploadVideoToCloud(jobId, filePath, apiKey) {
+  const fetch = require('node-fetch');
+  const FormData = require('form-data');
+  const db = require('./db');
+  
+  const serverRes = await fetch(`https://doodapi.com/api/upload/server?key=${apiKey}`);
+  const serverData = await serverRes.json();
+  if (!serverData.result) throw new Error('Failed to get upload server');
+
+  const uploadUrl = serverData.result + '?' + new URLSearchParams({ api_key: apiKey }).toString();
+  const form = new FormData();
+  form.append('api_key', apiKey);
+  const fileStream = fs.createReadStream(filePath);
+  form.append('file', fileStream);
+
+  const headers = form.getHeaders();
+  headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  
+  const https = require('https');
+  const agent = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
+
+  uploadJobs.set(jobId, { status: 'uploading', progress: 0, url: null, error: null });
+
+  const util = require('util');
+  const getLength = util.promisify(form.getLength).bind(form);
+  let totalLength = 0;
+  try { totalLength = await getLength(); headers['Content-Length'] = totalLength; } catch (e) {}
+
+  const { Transform } = require('stream');
+  let uploadedBytes = 0;
+  const progressStream = new Transform({
+    transform(chunk, encoding, callback) {
+      uploadedBytes += chunk.length;
+      if (totalLength) {
+        const pct = Math.round((uploadedBytes / totalLength) * 100);
+        uploadJobs.set(jobId, { status: 'uploading', progress: pct });
+      }
+      callback(null, chunk);
+    }
+  });
+
+  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent });
+  const textData = await uploadRes.text();
+  const uploadData = JSON.parse(textData);
+
+  if (uploadData.result && uploadData.result.length > 0) {
+    const downloadedUrl = uploadData.result[0].download_url;
+    db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(downloadedUrl, jobId);
+    uploadJobs.set(jobId, { status: 'complete', url: downloadedUrl });
+    return downloadedUrl;
+  } else {
+    throw new Error('Upload failed remotely');
+  }
+}
+
+app.post('/api/upload/:jobId', authenticateUser, async (req, res) => {
+  const jobId = req.params.jobId;
+  const filePath = path.join(__dirname, 'tmp_jobs', jobId, 'output.mp4');
+
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found or has expired.' });
+  if (uploadJobs.has(jobId) && uploadJobs.get(jobId).status !== 'error') return res.json({ status: 'started' });
+
+  try {
+    const db = require('./db');
+    const hist = db.prepare('SELECT * FROM history WHERE id = ? AND user_id = ?').get(jobId, req.user.id);
+    if (!hist) return res.status(403).json({ error: 'Forbidden' });
+    const setting = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
+    const apiKey = setting ? setting.value : null;
+    if (!apiKey) return res.status(400).json({ error: 'API key not configured by admin.' });
+
+    res.json({ status: 'started' }); 
+
+    uploadVideoToCloud(jobId, filePath, apiKey).catch(err => {
+       uploadJobs.set(jobId, { status: 'error', error: err.message });
+    });
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/history', authenticateUser, (req, res) => {
+  try {
+    const db = require('./db');
+    const history = db.prepare('SELECT * FROM history WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+    const backlog = db.prepare("SELECT * FROM backlog WHERE user_id = ? AND status IN ('pending', 'retrying') ORDER BY created_at DESC").all(req.user.id);
+    
+    // Find active jobs for this user from memory
+    const activeUserJobs = [];
+    for (const [id, job] of jobs.entries()) {
+      if (job.userId === req.user.id && job.status !== 'complete' && job.status !== 'error') {
+        activeUserJobs.push({
+          id: job.id, status: job.status, progress: job.progress, eta: job.eta,
+          url: job.url, clipMode: job.clipMode, startTime: job.startTime,
+          chunksStolen: job.chunksStolen
+        });
+      }
+    }
+    
+    const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'failed_download_msg'").get();
+    const failedMsg = msgSetting?.value || "The download failed now but will resume shortly and we will let you know when your video is ready. You can provide an email for notification.";
+    
+    res.json({ history, backlog, activeJobs: activeUserJobs, failedMsg });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+app.post('/api/admin/login', (req, res) => {
+  if (req.body.password === adminConfig.adminPassword) {
+    res.json({ token: adminToken() });
+  } else {
+    res.status(401).json({ error: 'Wrong password.' });
+  }
+});
+
+app.post('/api/admin/credentials', (req, res) => {
+  if (req.body.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  if (req.body.email && req.body.password) {
+    sessionMgr.setCredentials(req.body.email, req.body.password);
+  }
+  if (req.body.cookies) {
+    sessionMgr.setManualCookies(req.body.cookies);
+  }
+  res.json({ success: true });
+});
+
+// Force session refresh endpoint
+app.post('/api/admin/refresh-session', async (req, res) => {
+  if (req.body.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await sessionMgr.forceRefresh();
+    res.json({ success: true, status: sessionMgr.getStatus() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/status', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const sess = sessionMgr.getStatus();
+  res.json({
+    session: sess,
+    activeJobs: Array.from(jobs.values()).map(j => ({
+      id: j.id, status: j.status, progress: j.progress,
+      url: j.url, clipMode: j.clipMode, chunksStolen: j.chunksStolen
+    })),
+    totalIPs: ipUsage.size,
+    bypassCode: BYPASS_CODE,
+    priceUSD: PRICE_USD
+  });
+});
+
+app.get('/api/admin/settings', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('./db');
+  const getSetting = (k) => { const s = db.prepare("SELECT value FROM settings WHERE key = ?").get(k); return s ? s.value : ''; };
+  
+  res.json({ 
+    upload_api_key: getSetting('upload_api_key'),
+    retry_interval: getSetting('retry_interval') || '15',
+    smtp_host: getSetting('smtp_host'),
+    smtp_port: getSetting('smtp_port'),
+    smtp_user: getSetting('smtp_user'),
+    smtp_pass: getSetting('smtp_pass'),
+    failed_download_msg: getSetting('failed_download_msg'),
+    download_start_msg: getSetting('download_start_msg'),
+    success_email_msg: getSetting('success_email_msg')
+  });
+});
+
+app.post('/api/admin/settings', (req, res) => {
+  if (req.body.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('./db');
+  const stmt = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  
+  const update = (k, v) => { if (v !== undefined) stmt.run(k, v); };
+  update('upload_api_key', req.body.upload_api_key);
+  update('retry_interval', req.body.retry_interval);
+  update('smtp_host', req.body.smtp_host);
+  update('smtp_port', req.body.smtp_port);
+  update('smtp_user', req.body.smtp_user);
+  update('smtp_pass', req.body.smtp_pass);
+  update('failed_download_msg', req.body.failed_download_msg);
+  update('download_start_msg', req.body.download_start_msg);
+  update('success_email_msg', req.body.success_email_msg);
+  
+  res.json({ success: true });
+});
+
+app.get('/api/admin/backlog/export', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('./db');
+  const items = db.prepare("SELECT b.*, u.email FROM backlog b JOIN users u ON b.user_id = u.id ORDER BY b.created_at DESC").all();
+  
+  let csv = 'ID,User_Email,Video_URL,Status,Created_At\n';
+  items.forEach(i => {
+    csv += `"${i.id}","${i.email}","${i.video_url}","${i.status}","${i.created_at}"\n`;
+  });
+  
+  res.setHeader('Content-Disposition', 'attachment; filename="failed_backlog.csv"');
+  res.setHeader('Content-Type', 'text/csv');
+  res.send(csv);
+});
+
+app.get('/api/admin/analytics', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('./db');
+  const totalUsers = db.prepare("SELECT COUNT(*) as count FROM users").get().count;
+  const totalDownloads = db.prepare("SELECT COUNT(*) as count FROM history").get().count;
+  const byUser = db.prepare("SELECT u.email, COUNT(h.id) as count FROM users u JOIN history h ON u.id = h.user_id GROUP BY u.id").all();
+  const byDay = db.prepare("SELECT date(created_at) as date, COUNT(*) as count FROM history GROUP BY date(created_at) ORDER BY date DESC LIMIT 30").all();
+  
+  res.json({ totalUsers, totalDownloads, byUser, byDay });
+});
+
+// ─── 24-Hour Cleanup Routine ──────────────────────────────────────────────────
+setInterval(() => {
+  try {
+    const tmpDir = path.join(__dirname, 'tmp_jobs');
+    if (!fs.existsSync(tmpDir)) return;
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    fs.readdirSync(tmpDir).forEach(folder => {
+      const folderPath = path.join(tmpDir, folder);
+      const stats = fs.statSync(folderPath);
+      if (now - stats.mtimeMs > maxAge) {
+        fs.rmSync(folderPath, { recursive: true, force: true });
+        console.log(`[Cleanup] Deleted expired job folder: ${folder}`);
+      }
+    });
+    
+    // Also clean up old jobs from memory map
+    for (const [id, job] of jobs.entries()) {
+      if (job.status === 'complete' || job.status === 'error') {
+        if (now - job.startTime > maxAge) jobs.delete(id);
+      }
+    }
+  } catch (err) {
+    console.error('[Cleanup Error]', err);
+  }
+}, 60 * 60 * 1000); // Run every hour
+
+// ─── Background Backlog Worker ────────────────────────────────────────────────
+let backlogTimer = null;
+
+async function processBacklog() {
+  try {
+    const db = require('./db');
+    // Fetch interval in minutes, default 15
+    const intervalStr = db.prepare("SELECT value FROM settings WHERE key = 'retry_interval'").get()?.value;
+    const intervalMin = parseInt(intervalStr, 10) || 15;
+    
+    // Process 1 pending item
+    const item = db.prepare("SELECT b.*, u.email FROM backlog b JOIN users u ON b.user_id = u.id WHERE b.status = 'pending' LIMIT 1").get();
+    
+    if (item) {
+      console.log(`[Backlog Worker] Retrying job ${item.id} for ${item.email}`);
+      db.prepare("UPDATE backlog SET status = 'retrying' WHERE id = ?").run(item.id);
+      
+      const jobId = uuidv4();
+      const job = {
+        id: jobId, status: 'queued', progress: 0, eta: null,
+        filePath: null, error: null, clients: [],
+        clipMode: !!item.is_clip, clipStart: item.clip_start || 0,
+        clipEnd: item.clip_end || null, url: item.video_url, startTime: Date.now(), chunksStolen: 0,
+        userId: item.user_id,
+        // Override broadcast to hook into completion
+        isBacklogRetry: true,
+        backlogId: item.id,
+        notifyEmail: item.notify_email,
+        userEmail: item.email
+      };
+      
+      jobs.set(jobId, job);
+      
+      try {
+        await startDownload(job, sessionMgr, async (j) => {
+          if (j.status === 'complete' && !j.backlogHandled) {
+            j.backlogHandled = true;
+            db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(j.backlogId);
+            db.prepare('INSERT INTO history (id, user_id, video_url, is_clip) VALUES (?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0);
+            
+            const setting = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
+            const apiKey = setting ? setting.value : null;
+            let cloudUrl = null;
+            if (apiKey) {
+               try {
+                  console.log(`[Backlog Worker] Starting cloud upload for ${j.id}`);
+                  cloudUrl = await uploadVideoToCloud(j.id, j.filePath, apiKey);
+                  console.log(`[Backlog Worker] Uploaded successfully: ${cloudUrl}`);
+               } catch (e) {
+                  console.error(`[Backlog Worker] Upload failed:`, e.message);
+               }
+            }
+
+            if (j.notifyEmail) {
+              const { sendEmail } = require('./mailer');
+              const extraTxt = cloudUrl ? `\n\nCloud Link: ${cloudUrl}` : `\n\nYou can access it from your dashboard.`;
+              sendEmail(j.userEmail, 'Your Video Download is Ready!', `Your requested video has been successfully downloaded by Ekkoscope.\n\nVideo URL: ${j.url}${extraTxt}`);
+            }
+          } else if (j.status === 'error' && !j.backlogHandled) {
+            j.backlogHandled = true;
+            db.prepare("UPDATE backlog SET status = 'pending' WHERE id = ?").run(j.backlogId);
+          }
+        });
+      } catch (err) {
+        db.prepare("UPDATE backlog SET status = 'pending' WHERE id = ?").run(item.id);
+      }
+    }
+    
+    backlogTimer = setTimeout(processBacklog, intervalMin * 60 * 1000);
+  } catch (err) {
+    console.error('[Backlog Worker Error]', err);
+    backlogTimer = setTimeout(processBacklog, 15 * 60 * 1000); // 15 min fallback
+  }
+}
+
+// Start worker slightly after boot
+setTimeout(processBacklog, 10000);
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`\n🚀 Ekkoscope Web Platform running at http://localhost:${PORT}`);
+  console.log(`🔑 Admin panel: http://localhost:${PORT}/admin.html`);
+  console.log(`🧪 Bypass code: ${BYPASS_CODE}`);
+  console.log(`🍪 Session status: ${sessionMgr.getStatus().cookiesSet ? '✅ Cookies loaded' : '⚠️  No cookies — visit admin panel'}\n`);
+});
