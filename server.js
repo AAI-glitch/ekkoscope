@@ -135,6 +135,27 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
   };
   jobs.set(jobId, job);
 
+  const handleJobError = (job, err, broadcast) => {
+    job.status = 'error';
+    job.error = err.message;
+    broadcast(job);
+    
+    // Auto-add to backlog for authenticated users
+    if (job.userId && !job.isBacklogRetry) {
+      try {
+        const db = require('./db');
+        const backlogId = uuidv4();
+        db.prepare(`
+          INSERT INTO backlog (id, user_id, video_url, is_clip, clip_start, clip_end, notify_email, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+        `).run(backlogId, job.userId, job.url, job.clipMode ? 1 : 0, job.clipStart || null, job.clipEnd || null, job.notifyEmail ? 1 : 0);
+        console.log(`[Server] Job ${job.id} failed, automatically added to backlog as ${backlogId}`);
+      } catch (e) {
+        console.error('[Server] Failed to auto-add to backlog:', e);
+      }
+    }
+  };
+
   // Pass session manager so downloader always has latest cookies
   startDownload(job, sessionMgr, broadcast).catch(async err => {
     // If 403/401 error → force cookie refresh and retry once
@@ -147,14 +168,10 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
         await sessionMgr.forceRefresh();
         await startDownload(job, sessionMgr, broadcast);
       } catch (retryErr) {
-        job.status = 'error';
-        job.error = retryErr.message;
-        broadcast(job);
+        handleJobError(job, retryErr, broadcast);
       }
     } else {
-      job.status = 'error';
-      job.error = err.message;
-      broadcast(job);
+      handleJobError(job, err, broadcast);
     }
   });
 
@@ -185,6 +202,7 @@ app.get('/api/progress/:jobId', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Prevent proxy buffering
   res.flushHeaders();
 
   const send = (payload) => res.write(`data: ${payload}\n\n`);
@@ -435,6 +453,13 @@ app.get('/api/admin/backlog/export', (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="failed_backlog.csv"');
   res.setHeader('Content-Type', 'text/csv');
   res.send(csv);
+});
+
+app.get('/api/admin/backlog', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const db = require('./db');
+  const items = db.prepare("SELECT b.*, u.email FROM backlog b JOIN users u ON b.user_id = u.id ORDER BY b.created_at DESC").all();
+  res.json({ backlog: items });
 });
 
 app.get('/api/admin/analytics', (req, res) => {

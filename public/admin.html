@@ -202,6 +202,17 @@
       </div>
     </div>
 
+    <!-- Backlog -->
+    <div class="card admin-grid-full">
+      <div class="card-title">Failed Backlog <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-retrying jobs</span></div>
+      <div class="table-container">
+        <table class="custom-table" id="table-backlog">
+          <thead><tr><th>Date</th><th>User Email</th><th>Video URL</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Bypass code -->
     <div class="card">
       <div class="card-title">Bypass Code</div>
@@ -340,9 +351,10 @@ async function saveCreds() {
 }
 
 async function loadAnalytics() {
-  const [analyticsRes, settingsRes] = await Promise.all([
+  const [analyticsRes, settingsRes, backlogRes] = await Promise.all([
     fetch('/api/admin/analytics?token='+adminToken),
-    fetch('/api/admin/settings?token='+adminToken)
+    fetch('/api/admin/settings?token='+adminToken),
+    fetch('/api/admin/backlog?token='+adminToken)
   ]);
   if (analyticsRes.ok) {
     const data = await analyticsRes.json();
@@ -362,6 +374,21 @@ async function loadAnalytics() {
     document.getElementById('setting-failed-msg').value = data.failed_download_msg || '';
     document.getElementById('setting-download-start-msg').value = data.download_start_msg || '';
     document.getElementById('setting-success-email-msg').value = data.success_email_msg || '';
+  }
+  if (backlogRes.ok) {
+    const data = await backlogRes.json();
+    document.querySelector('#table-backlog tbody').innerHTML = data.backlog.map(row => {
+      const statusColor = row.status === 'completed' ? 'pill-green' : (row.status === 'retrying' ? 'pill-yellow' : 'pill-red');
+      return `<tr>
+        <td>${new Date(row.created_at).toLocaleString()}</td>
+        <td>${row.email}</td>
+        <td><a href="${row.video_url}" target="_blank" style="color:#60a5fa;text-decoration:none">${row.video_url.length > 50 ? row.video_url.substring(0, 50) + '...' : row.video_url}</a></td>
+        <td><span class="pill ${statusColor}">${row.status}</span></td>
+      </tr>`;
+    }).join('');
+    if(data.backlog.length === 0) {
+      document.querySelector('#table-backlog tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted)">No backlog items.</td></tr>`;
+    }
   }
 }
 

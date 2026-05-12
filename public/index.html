@@ -360,9 +360,7 @@ function renderDashboard(data) {
         <td style="color:var(--muted)">${index++}</td>
         <td class="td-thumb"><img src="/api/thumbnail/${jobId}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>PREVIEW</div>'"/></td>
         <td id="act-${jobId}">
-          ${job.error 
-            ? `<button id="backlog-btn-${jobId}" class="action-play" style="color:#eab308" onclick="addToBacklog('${jobId}')">${getPlayIcon()} Auto-Retry</button>` 
-            : `<span style="color:var(--muted);font-size:12px">Processing...</span>`}
+          <span style="color:var(--muted);font-size:12px">Processing...</span>
         </td>
         <td style="text-align:center" id="stat-${jobId}">${statIcon}</td>
         <td id="msg-${jobId}">${msgHtml}</td>
@@ -619,10 +617,10 @@ function handleSSE(jobId, jsonData, es) {
     es.close();
     setBtnsDisabled(false);
     loadFreeTier();
-    if (d.status === 'complete') {
-      delete activeJobs[jobId]; 
-      loadHistory(); // refresh history fully to pick up the row
-    }
+    // For both complete and error, delete from active jobs and reload history.
+    // Errors are now automatically added to the backlog and will be shown as Pending Auto-Retry.
+    delete activeJobs[jobId]; 
+    loadHistory(); 
   }
 }
 
