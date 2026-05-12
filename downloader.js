@@ -377,12 +377,16 @@ async function startDownload(job, sessionMgr, broadcast) {
     await execAsync(ffmpegCmd);
 
     // ── Generate Thumbnail ────────────────────────────────────────────────────
-    const thumbPath = path.join(jobDir, 'thumb.jpg');
+    const thumbPath = path.join(jobDir, 'thumb.gif');
     try {
-      // Take the very first frame to avoid seeking errors on short/corrupted clips
-      await execAsync(`ffmpeg -v error -y -i "${outputPath}" -vframes 1 -q:v 2 "${thumbPath}"`);
+      // Create a 3-second animated GIF at 10fps, max width 250px
+      await execAsync(`ffmpeg -v error -y -i "${outputPath}" -t 3 -vf "fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${thumbPath}"`);
     } catch(e) {
-      console.warn('[Downloader] Failed to generate thumbnail:', e.message);
+      console.warn('[Downloader] Failed to generate GIF thumbnail:', e.message);
+      // Fallback to static jpg
+      try {
+        await execAsync(`ffmpeg -v error -y -i "${outputPath}" -vframes 1 -q:v 2 "${path.join(jobDir, 'thumb.jpg')}"`);
+      } catch (err2) {}
     }
 
     // Cleanup .ts files

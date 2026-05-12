@@ -296,7 +296,7 @@ function renderAuthBox() {
       <button class="btn btn-ghost btn-sm" onclick="openAuthModal('login')">Log In</button>
       <button class="btn btn-full btn-sm" style="background:linear-gradient(135deg,#f43f5e,#e11d48);box-shadow:0 4px 15px rgba(244,63,94,0.3)" onclick="openAuthModal('register')">Register</button>
     `;
-    document.getElementById('dash-list').innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 20px;background:var(--surface);border-radius:14px;border:1px solid var(--border)">Log in to view your downloads.</div>`;
+    document.getElementById('dash-tbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Log in to view your downloads.</td></tr>`;
   }
 }
 

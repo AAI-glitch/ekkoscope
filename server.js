@@ -235,7 +235,10 @@ app.get('/api/download/:jobId', (req, res) => {
 });
 
 app.get('/api/thumbnail/:jobId', (req, res) => {
-  const filePath = path.join(__dirname, 'tmp_jobs', req.params.jobId, 'thumb.jpg');
+  let filePath = path.join(__dirname, 'tmp_jobs', req.params.jobId, 'thumb.gif');
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(__dirname, 'tmp_jobs', req.params.jobId, 'thumb.jpg');
+  }
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);
   } else {
