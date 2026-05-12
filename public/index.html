@@ -358,7 +358,7 @@ function renderDashboard(data) {
     html += `
       <tr id="job-${jobId}">
         <td style="color:var(--muted)">${index++}</td>
-        <td class="td-thumb"><img src="/api/thumbnail/${jobId}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>PREVIEW</div>'"/></td>
+        <td class="td-thumb"><div class="no-thumb">PREVIEW</div></td>
         <td id="act-${jobId}">
           <span style="color:var(--muted);font-size:12px">Processing...</span>
         </td>
@@ -583,7 +583,10 @@ async function startJob(clipMode, bypassCode) {
   
     const es = new EventSource('/api/progress/'+data.jobId);
     es.onmessage = (e) => handleSSE(data.jobId, e.data, es);
-    es.onerror = () => { es.close(); setBtnsDisabled(false); };
+    es.onerror = (err) => {
+      console.warn('SSE connection dropped, auto-reconnecting...', err);
+      // Do NOT call es.close() here. Allow native EventSource to auto-reconnect.
+    };
   };
   
   // If user cancels modal, re-enable buttons
