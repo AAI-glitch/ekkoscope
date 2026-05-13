@@ -376,11 +376,31 @@ async function startDownload(job, sessionMgr, broadcast) {
     broadcast(job);
     await execAsync(ffmpegCmd);
 
+    // ── Extract exact duration ────────────────────────────────────────────────
+    let videoDuration = 0;
+    try {
+      const { stdout } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`);
+      const dur = parseFloat(stdout);
+      if (!isNaN(dur)) {
+        job.duration = dur;
+        videoDuration = dur;
+      }
+    } catch (e) {
+      console.warn('[Downloader] Failed to extract duration:', e.message);
+    }
+
     // ── Generate Thumbnail ────────────────────────────────────────────────────
     const thumbPath = path.join(jobDir, 'thumb.gif');
     try {
-      // Create a 3-second animated GIF at 10fps, max width 250px
-      await execAsync(`ffmpeg -v error -y -i "${outputPath}" -t 3 -vf "fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "${thumbPath}"`);
+      const gifDur = job.gifDuration || 3;
+      if (videoDuration > gifDur * 2) {
+        const speed = (gifDur / videoDuration).toFixed(5);
+        const filter = `setpts=${speed}*PTS,fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
+        await execAsync(`ffmpeg -v error -y -skip_frame nokey -i "${outputPath}" -vf "${filter}" -t ${gifDur} -loop 0 "${thumbPath}"`);
+      } else {
+        const filter = `fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
+        await execAsync(`ffmpeg -v error -y -i "${outputPath}" -t ${gifDur} -vf "${filter}" -loop 0 "${thumbPath}"`);
+      }
     } catch(e) {
       console.warn('[Downloader] Failed to generate GIF thumbnail:', e.message);
       // Fallback to static jpg
@@ -392,15 +412,6 @@ async function startDownload(job, sessionMgr, broadcast) {
     // Cleanup .ts files
     chunkFiles.forEach(f => { try { fs.unlinkSync(f); } catch(e) {} });
     try { fs.unlinkSync(concatPath); } catch(e) {}
-
-    // ── Extract exact duration ────────────────────────────────────────────────
-    try {
-      const { stdout } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`);
-      const dur = parseFloat(stdout);
-      if (!isNaN(dur)) job.duration = dur;
-    } catch (e) {
-      console.warn('[Downloader] Failed to extract duration:', e.message);
-    }
 
     job.status   = 'complete';
     job.progress = 100;

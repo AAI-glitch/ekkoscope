@@ -124,6 +124,14 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
   }
 
   const jobId = uuidv4();
+  
+  let gifDuration = 3;
+  try {
+    const db = require('./db');
+    const s = db.prepare("SELECT value FROM settings WHERE key = 'gif_duration'").get();
+    if (s && s.value) gifDuration = parseInt(s.value, 10);
+  } catch(e) {}
+
   const job = {
     id: jobId, status: 'queued', progress: 0, eta: null,
     filePath: null, error: null, clients: [],
@@ -131,7 +139,8 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
     clipEnd: clipEnd || null, url, startTime: Date.now(), chunksStolen: 0,
     userId: req.user ? req.user.id : null,
     notifyEmail: !!notifyEmail,
-    userEmail: req.user ? req.user.email : null
+    userEmail: req.user ? req.user.email : null,
+    gifDuration: gifDuration
   };
   jobs.set(jobId, job);
 
@@ -420,7 +429,8 @@ app.get('/api/admin/settings', (req, res) => {
     smtp_pass: getSetting('smtp_pass'),
     failed_download_msg: getSetting('failed_download_msg'),
     download_start_msg: getSetting('download_start_msg'),
-    success_email_msg: getSetting('success_email_msg')
+    success_email_msg: getSetting('success_email_msg'),
+    gif_duration: getSetting('gif_duration') || '3'
   });
 });
 
@@ -439,6 +449,7 @@ app.post('/api/admin/settings', (req, res) => {
   update('failed_download_msg', req.body.failed_download_msg);
   update('download_start_msg', req.body.download_start_msg);
   update('success_email_msg', req.body.success_email_msg);
+  update('gif_duration', req.body.gif_duration);
   
   res.json({ success: true });
 });
@@ -521,7 +532,10 @@ async function processBacklog() {
       console.log(`[Backlog Worker] Retrying job ${item.id} for ${item.email}`);
       db.prepare("UPDATE backlog SET status = 'retrying' WHERE id = ?").run(item.id);
       
-      const jobId = uuidv4();
+      const gifDurationStr = db.prepare("SELECT value FROM settings WHERE key = 'gif_duration'").get()?.value;
+      const gifDuration = parseInt(gifDurationStr, 10) || 3;
+      
+      const jobId = item.id;
       const job = {
         id: jobId, status: 'queued', progress: 0, eta: null,
         filePath: null, error: null, clients: [],
@@ -532,7 +546,8 @@ async function processBacklog() {
         isBacklogRetry: true,
         backlogId: item.id,
         notifyEmail: item.notify_email,
-        userEmail: item.email
+        userEmail: item.email,
+        gifDuration: gifDuration
       };
       
       jobs.set(jobId, job);

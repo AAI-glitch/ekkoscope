@@ -194,6 +194,9 @@
       <label class="field-label" style="margin-top:10px">Successful Download Email Message</label>
       <textarea id="setting-success-email-msg" class="text-input" rows="2" placeholder="Your requested video has been successfully downloaded by Ekkoscope." style="resize:vertical"></textarea>
 
+      <label class="field-label" style="margin-top:10px">Thumbnail GIF Duration (seconds)</label>
+      <input id="setting-gif-duration" class="text-input" type="number" placeholder="3"/>
+
       <button class="btn btn-primary" onclick="saveSystemSettings()" style="margin-top: 10px;">💾 Save System Settings</button>
       <div id="sys-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
       
@@ -374,6 +377,7 @@ async function loadAnalytics() {
     document.getElementById('setting-failed-msg').value = data.failed_download_msg || '';
     document.getElementById('setting-download-start-msg').value = data.download_start_msg || '';
     document.getElementById('setting-success-email-msg').value = data.success_email_msg || '';
+    document.getElementById('setting-gif-duration').value = data.gif_duration || '3';
   }
   if (backlogRes.ok) {
     const data = await backlogRes.json();
@@ -421,10 +425,11 @@ async function saveSystemSettings() {
   const failed_download_msg = document.getElementById('setting-failed-msg').value;
   const download_start_msg = document.getElementById('setting-download-start-msg').value;
   const success_email_msg = document.getElementById('setting-success-email-msg').value;
+  const gif_duration = document.getElementById('setting-gif-duration').value;
 
   const res = await fetch('/api/admin/settings', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ token: adminToken, retry_interval, smtp_host, smtp_port, smtp_user, smtp_pass, failed_download_msg, download_start_msg, success_email_msg })
+    body: JSON.stringify({ token: adminToken, retry_interval, smtp_host, smtp_port, smtp_user, smtp_pass, failed_download_msg, download_start_msg, success_email_msg, gif_duration })
   });
   const data = await res.json();
   const msg = document.getElementById('sys-settings-status');
