@@ -51,6 +51,10 @@ try {
 } catch (err) {}
 
 try {
+  db.prepare("ALTER TABLE history ADD COLUMN uploaded_url_2 TEXT").run();
+} catch (err) {}
+
+try {
   db.prepare("ALTER TABLE history ADD COLUMN duration INTEGER").run();
 } catch (err) {}
 

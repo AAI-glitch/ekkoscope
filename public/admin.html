@@ -153,10 +153,14 @@
 
     <!-- DoodAPI Configuration -->
     <div class="card">
-      <div class="card-title">Upload API Configuration <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— doodapi.com</span></div>
-      <label class="field-label">API Key</label>
+      <div class="card-title">Upload API Configuration <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Cloud Hosts</span></div>
+      <label class="field-label">DoodAPI Key</label>
       <input id="upload-api-key" class="text-input" type="text" placeholder="Enter DoodAPI Key"/>
-      <button class="btn btn-primary" onclick="saveApiKey()">💾 Save API Key</button>
+      
+      <label class="field-label" style="margin-top:10px">KrakenFiles API Key</label>
+      <input id="upload-api-key-2" class="text-input" type="text" placeholder="Enter KrakenFiles API Key"/>
+      
+      <button class="btn btn-primary" onclick="saveApiKey()" style="margin-top:10px">💾 Save API Keys</button>
       <div id="api-key-status" style="font-size:12px;margin-top:10px;display:none"></div>
     </div>
 
@@ -208,9 +212,9 @@
     <!-- Backlog -->
     <div class="card admin-grid-full">
       <div class="card-title">Failed Backlog <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-retrying jobs</span></div>
-      <div class="table-container">
+      <div class="table-container" style="overflow:visible">
         <table class="custom-table" id="table-backlog">
-          <thead><tr><th>Date</th><th>User Email</th><th>Video URL</th><th>Status</th></tr></thead>
+          <thead><tr><th>Date</th><th>User Email</th><th>Video URL</th><th>Status</th><th>Action</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -232,6 +236,28 @@
     </div>
 
     <a href="/" class="nav-link admin-grid-full">← Back to User Page</a>
+  </div>
+</div>
+
+<!-- Fulfill Modal -->
+<div id="fulfill-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(5px);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px">
+  <div class="card" style="max-width:400px;width:100%">
+    <div class="card-title">Fulfill Download Manually</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+      If you placed `output.mp4` in the server's `tmp_jobs/<ID>` folder, just click <b>Mark as Ready</b>. 
+      If you uploaded the video to your cloud hosts manually, paste the links below.
+    </p>
+    <label class="field-label">DoodAPI Link (optional)</label>
+    <input id="fulfill-url-1" class="text-input" type="url" placeholder="https://dood..."/>
+    <label class="field-label">KrakenFiles Link (optional)</label>
+    <input id="fulfill-url-2" class="text-input" type="url" placeholder="https://krakenfiles..."/>
+    
+    <input type="hidden" id="fulfill-id"/>
+    
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button class="btn btn-primary" onclick="submitFulfill()">✅ Mark as Ready</button>
+      <button class="btn" style="background:rgba(255,255,255,0.1);color:#fff" onclick="document.getElementById('fulfill-modal').style.display='none'">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -369,6 +395,7 @@ async function loadAnalytics() {
   if (settingsRes.ok) {
     const data = await settingsRes.json();
     document.getElementById('upload-api-key').value = data.upload_api_key || '';
+    document.getElementById('upload-api-key-2').value = data.upload_api_key_2 || '';
     document.getElementById('setting-retry-interval').value = data.retry_interval || '15';
     document.getElementById('setting-smtp-host').value = data.smtp_host || '';
     document.getElementById('setting-smtp-port').value = data.smtp_port || '';
@@ -388,19 +415,46 @@ async function loadAnalytics() {
         <td>${row.email}</td>
         <td><a href="${row.video_url}" target="_blank" style="color:#60a5fa;text-decoration:none">${row.video_url.length > 50 ? row.video_url.substring(0, 50) + '...' : row.video_url}</a></td>
         <td><span class="pill ${statusColor}">${row.status}</span></td>
+        <td><button class="btn btn-primary btn-sm" onclick="openFulfillModal('${row.id}')">Fulfill</button></td>
       </tr>`;
     }).join('');
     if(data.backlog.length === 0) {
-      document.querySelector('#table-backlog tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--muted)">No backlog items.</td></tr>`;
+      document.querySelector('#table-backlog tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No backlog items.</td></tr>`;
     }
   }
 }
 
+function openFulfillModal(id) {
+  document.getElementById('fulfill-id').value = id;
+  document.getElementById('fulfill-url-1').value = '';
+  document.getElementById('fulfill-url-2').value = '';
+  document.getElementById('fulfill-modal').style.display = 'flex';
+}
+
+async function submitFulfill() {
+  const id = document.getElementById('fulfill-id').value;
+  const cloudUrl1 = document.getElementById('fulfill-url-1').value.trim();
+  const cloudUrl2 = document.getElementById('fulfill-url-2').value.trim();
+  
+  const res = await fetch('/api/admin/backlog/fulfill', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ token: adminToken, id, cloudUrl1, cloudUrl2 })
+  });
+  if (res.ok) {
+    document.getElementById('fulfill-modal').style.display = 'none';
+    loadAnalytics(); // refresh table
+  } else {
+    const data = await res.json();
+    alert(data.error || 'Failed to fulfill');
+  }
+}
+
 async function saveApiKey() {
-  const key = document.getElementById('upload-api-key').value.trim();
+  const key1 = document.getElementById('upload-api-key').value.trim();
+  const key2 = document.getElementById('upload-api-key-2').value.trim();
   const res = await fetch('/api/admin/settings', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ token: adminToken, upload_api_key: key })
+    body: JSON.stringify({ token: adminToken, upload_api_key: key1, upload_api_key_2: key2 })
   });
   const data = await res.json();
   const msg = document.getElementById('api-key-status');

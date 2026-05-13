@@ -309,10 +309,43 @@ async function uploadVideoToCloud(jobId, filePath, apiKey) {
   if (uploadData.result && uploadData.result.length > 0) {
     const downloadedUrl = uploadData.result[0].download_url;
     db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(downloadedUrl, jobId);
-    uploadJobs.set(jobId, { status: 'complete', url: downloadedUrl });
     return downloadedUrl;
   } else {
     throw new Error('Upload failed remotely');
+  }
+}
+
+async function uploadToKrakenFiles(jobId, filePath, apiKey) {
+  const fetch = require('node-fetch');
+  const FormData = require('form-data');
+  const db = require('./db');
+  
+  const serverRes = await fetch('https://krakenfiles.com/api/server/available', {
+    headers: { 'Accept': 'application/json' }
+  });
+  const serverData = await serverRes.json();
+  if (serverData.status !== 200 || !serverData.data.url) throw new Error('Failed to get KrakenFiles upload server');
+
+  const uploadUrl = serverData.data.url;
+  const serverAccessToken = serverData.data.serverAccessToken;
+
+  const form = new FormData();
+  form.append('serverAccessToken', serverAccessToken);
+  const fileStream = fs.createReadStream(filePath);
+  form.append('file', fileStream);
+
+  const headers = form.getHeaders();
+  headers['X-AUTH-TOKEN'] = apiKey;
+
+  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form, headers: headers });
+  const uploadData = await uploadRes.json();
+
+  if (uploadData.status === 200 && uploadData.data.url) {
+    const downloadedUrl = uploadData.data.url;
+    db.prepare('UPDATE history SET uploaded_url_2 = ? WHERE id = ?').run(downloadedUrl, jobId);
+    return downloadedUrl;
+  } else {
+    throw new Error(uploadData.data?.message || 'KrakenFiles Upload failed remotely');
   }
 }
 
@@ -327,14 +360,25 @@ app.post('/api/upload/:jobId', authenticateUser, async (req, res) => {
     const db = require('./db');
     const hist = db.prepare('SELECT * FROM history WHERE id = ? AND user_id = ?').get(jobId, req.user.id);
     if (!hist) return res.status(403).json({ error: 'Forbidden' });
-    const setting = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
-    const apiKey = setting ? setting.value : null;
-    if (!apiKey) return res.status(400).json({ error: 'API key not configured by admin.' });
+    const setting1 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
+    const apiKey1 = setting1 ? setting1.value : null;
+    const setting2 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key_2'").get();
+    const apiKey2 = setting2 ? setting2.value : null;
+    
+    if (!apiKey1 && !apiKey2) return res.status(400).json({ error: 'No API keys configured by admin.' });
 
     res.json({ status: 'started' }); 
 
-    uploadVideoToCloud(jobId, filePath, apiKey).catch(err => {
-       uploadJobs.set(jobId, { status: 'error', error: err.message });
+    uploadJobs.set(jobId, { status: 'uploading', progress: 0, error: null });
+
+    const promises = [];
+    if (apiKey1) promises.push(uploadVideoToCloud(jobId, filePath, apiKey1).catch(e => { throw new Error('DoodAPI: ' + e.message); }));
+    if (apiKey2) promises.push(uploadToKrakenFiles(jobId, filePath, apiKey2).catch(e => { throw new Error('KrakenFiles: ' + e.message); }));
+
+    Promise.all(promises).then(() => {
+        uploadJobs.set(jobId, { status: 'complete' });
+    }).catch(err => {
+        uploadJobs.set(jobId, { status: 'error', error: err.message });
     });
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: 'Server error' });
@@ -422,6 +466,7 @@ app.get('/api/admin/settings', (req, res) => {
   
   res.json({ 
     upload_api_key: getSetting('upload_api_key'),
+    upload_api_key_2: getSetting('upload_api_key_2'),
     retry_interval: getSetting('retry_interval') || '15',
     smtp_host: getSetting('smtp_host'),
     smtp_port: getSetting('smtp_port'),
@@ -441,6 +486,7 @@ app.post('/api/admin/settings', (req, res) => {
   
   const update = (k, v) => { if (v !== undefined) stmt.run(k, v); };
   update('upload_api_key', req.body.upload_api_key);
+  update('upload_api_key_2', req.body.upload_api_key_2);
   update('retry_interval', req.body.retry_interval);
   update('smtp_host', req.body.smtp_host);
   update('smtp_port', req.body.smtp_port);
@@ -485,6 +531,40 @@ app.get('/api/admin/analytics', (req, res) => {
   const byDay = db.prepare("SELECT date(created_at) as date, COUNT(*) as count FROM history GROUP BY date(created_at) ORDER BY date DESC LIMIT 30").all();
   
   res.json({ totalUsers, totalDownloads, byUser, byDay });
+});
+
+app.post('/api/admin/backlog/fulfill', (req, res) => {
+  if (req.body.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const { id, cloudUrl1, cloudUrl2, isLocal } = req.body;
+  const db = require('./db');
+  const item = db.prepare('SELECT * FROM backlog WHERE id = ?').get(id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+
+  try {
+    db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(id);
+    db.prepare('INSERT OR IGNORE INTO history (id, user_id, video_url, is_clip) VALUES (?, ?, ?, ?)')
+      .run(item.id, item.user_id, item.video_url, item.is_clip ? 1 : 0);
+    
+    if (cloudUrl1) db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(cloudUrl1, item.id);
+    if (cloudUrl2) db.prepare('UPDATE history SET uploaded_url_2 = ? WHERE id = ?').run(cloudUrl2, item.id);
+    
+    if (item.notify_email) {
+       const u = db.prepare('SELECT email FROM users WHERE id = ?').get(item.user_id);
+       if (u && u.email) {
+          const { sendEmail } = require('./mailer');
+          let extraTxt = '\n\nYou can access it from your dashboard.';
+          if (cloudUrl1 || cloudUrl2) {
+              extraTxt = `\n\nCloud Links:\n`;
+              if (cloudUrl1) extraTxt += `${cloudUrl1}\n`;
+              if (cloudUrl2) extraTxt += `${cloudUrl2}\n`;
+          }
+          sendEmail(u.email, 'Your Video Download is Ready!', `Your requested video has been successfully downloaded by Ekkoscope.\n\nVideo URL: ${item.video_url}${extraTxt}`);
+       }
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── 24-Hour Cleanup Routine ──────────────────────────────────────────────────
@@ -559,22 +639,34 @@ async function processBacklog() {
             db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(j.backlogId);
             db.prepare('INSERT INTO history (id, user_id, video_url, is_clip) VALUES (?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0);
             
-            const setting = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
-            const apiKey = setting ? setting.value : null;
-            let cloudUrl = null;
-            if (apiKey) {
+            const setting1 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
+            const apiKey1 = setting1 ? setting1.value : null;
+            const setting2 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key_2'").get();
+            const apiKey2 = setting2 ? setting2.value : null;
+            
+            let cloudUrls = [];
+            if (apiKey1) {
                try {
-                  console.log(`[Backlog Worker] Starting cloud upload for ${j.id}`);
-                  cloudUrl = await uploadVideoToCloud(j.id, j.filePath, apiKey);
-                  console.log(`[Backlog Worker] Uploaded successfully: ${cloudUrl}`);
+                  console.log(`[Backlog Worker] Starting DoodAPI cloud upload for ${j.id}`);
+                  cloudUrls.push(await uploadVideoToCloud(j.id, j.filePath, apiKey1));
                } catch (e) {
-                  console.error(`[Backlog Worker] Upload failed:`, e.message);
+                  console.error(`[Backlog Worker] DoodAPI Upload failed:`, e.message);
+               }
+            }
+            if (apiKey2) {
+               try {
+                  console.log(`[Backlog Worker] Starting KrakenFiles cloud upload for ${j.id}`);
+                  cloudUrls.push(await uploadToKrakenFiles(j.id, j.filePath, apiKey2));
+               } catch (e) {
+                  console.error(`[Backlog Worker] KrakenFiles Upload failed:`, e.message);
                }
             }
 
             if (j.notifyEmail) {
               const { sendEmail } = require('./mailer');
-              const extraTxt = cloudUrl ? `\n\nCloud Link: ${cloudUrl}` : `\n\nYou can access it from your dashboard.`;
+              let extraTxt = '';
+              if (cloudUrls.length > 0) extraTxt = `\n\nCloud Links:\n` + cloudUrls.join('\n');
+              else extraTxt = `\n\nYou can access it from your dashboard.`;
               sendEmail(j.userEmail, 'Your Video Download is Ready!', `Your requested video has been successfully downloaded by Ekkoscope.\n\nVideo URL: ${j.url}${extraTxt}`);
             }
           } else if (j.status === 'error' && !j.backlogHandled) {
