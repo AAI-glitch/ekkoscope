@@ -18,7 +18,14 @@ const authenticateUser = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.sendStatus(403);
-    req.user = user;
+    
+    try {
+      const dbUser = db.prepare('SELECT id FROM users WHERE id = ?').get(user.id);
+      if (!dbUser) return res.sendStatus(403);
+      req.user = user;
+    } catch(e) {
+      return res.sendStatus(500);
+    }
     next();
   });
 };
@@ -31,7 +38,10 @@ const optionalAuthenticate = (req, res, next) => {
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, user) => {
       if (!err) {
-        req.user = user;
+        try {
+          const dbUser = db.prepare('SELECT id FROM users WHERE id = ?').get(user.id);
+          if (dbUser) req.user = user;
+        } catch(e) {}
       }
       next();
     });
