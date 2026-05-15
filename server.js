@@ -718,6 +718,12 @@ async function processBacklog() {
         });
       } catch (err) {
         db.prepare("UPDATE backlog SET status = 'pending' WHERE id = ?").run(item.id);
+        if (uploadJobs.has(activeJobId)) {
+          const zJob = uploadJobs.get(activeJobId);
+          zJob.status = 'error';
+          zJob.error = err.message;
+          uploadJobs.set(activeJobId, zJob);
+        }
       }
     }
     

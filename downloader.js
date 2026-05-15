@@ -252,7 +252,7 @@ async function startDownload(job, sessionMgr, broadcast) {
       v.volume = 0;
       let startPos = clipMode && clipStart > 0 ? clipStart : 0;
       if (resumeStart > startPos) startPos = resumeStart;
-      if (startPos > 0) v.currentTime = startPos;
+      v.currentTime = startPos;
       v.play().catch(() => {});
     }, job.clipMode, job.clipStart || 0, resumeStart);
 
@@ -301,8 +301,17 @@ async function startDownload(job, sessionMgr, broadcast) {
         }
 
         const target = clipMode ? clipEnd : v.duration;
+        const currentStart = clipMode && clipStart > 0 ? clipStart : 0;
 
-        // Done when buffered far enough
+        // Force jump if we are far behind the start time in clip mode
+        if (v.currentTime < currentStart - 5) {
+          v.currentTime = Math.max(0, currentStart - 2);
+        } else if (target && v.currentTime > target + 15) {
+          // If the player jumped way ahead (e.g., site auto-resume), pull it back
+          v.currentTime = Math.max(0, currentStart);
+        }
+
+        // Seek to near buffer edge to load next segments
         if (target && bufferedEnd >= target - 2) {
           // If we are doing a full download and the duration is suspiciously small (under 5 seconds), 
           // it might be a pre-roll ad, a splash screen, or metadata hasn't fully loaded yet. 
