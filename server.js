@@ -511,7 +511,10 @@ app.get('/api/admin/settings', (req, res) => {
     failed_download_msg: getSetting('failed_download_msg'),
     download_start_msg: getSetting('download_start_msg'),
     success_email_msg: getSetting('success_email_msg'),
-    gif_duration: getSetting('gif_duration') || '3'
+    gif_duration: getSetting('gif_duration') || '3',
+    seek_interval: getSetting('seek_interval') || '500',
+    buffer_margin: getSetting('buffer_margin') || '8',
+    seek_offset: getSetting('seek_offset') || '2'
   });
 });
 
@@ -532,6 +535,9 @@ app.post('/api/admin/settings', (req, res) => {
   update('download_start_msg', req.body.download_start_msg);
   update('success_email_msg', req.body.success_email_msg);
   update('gif_duration', req.body.gif_duration);
+  update('seek_interval', req.body.seek_interval);
+  update('buffer_margin', req.body.buffer_margin);
+  update('seek_offset', req.body.seek_offset);
   
   res.json({ success: true });
 });

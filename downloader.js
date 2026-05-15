@@ -263,12 +263,26 @@ async function startDownload(job, sessionMgr, broadcast) {
     const scrubStart   = Date.now();
     let   lastCount    = 0;
     let   stuckCounter = 0;
-    const STUCK_LIMIT  = 40; // 40 × 500ms = 20s idle = done
+    const STUCK_LIMIT  = 40; // 40 × interval = done
+
+    // Fetch dynamic performance settings
+    let seekInterval = 500;
+    let bufferMargin = 8;
+    let seekOffset = 2;
+    try {
+      const db = require('./db');
+      const sInt = db.prepare("SELECT value FROM settings WHERE key = 'seek_interval'").get();
+      if (sInt && sInt.value) seekInterval = parseInt(sInt.value, 10);
+      const bMarg = db.prepare("SELECT value FROM settings WHERE key = 'buffer_margin'").get();
+      if (bMarg && bMarg.value) bufferMargin = parseInt(bMarg.value, 10);
+      const sOff = db.prepare("SELECT value FROM settings WHERE key = 'seek_offset'").get();
+      if (sOff && sOff.value) seekOffset = parseInt(sOff.value, 10);
+    } catch(e) {}
 
     while (true) {
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, seekInterval));
 
-      const state = await page.evaluate((clipMode, clipStart, clipEnd) => {
+      const state = await page.evaluate((clipMode, clipStart, clipEnd, bMargin, sOffset) => {
         const v = document.querySelector('video');
         if (!v) return { done: true, gone: true, currentTime: 0, duration: 0 };
 
@@ -301,15 +315,15 @@ async function startDownload(job, sessionMgr, broadcast) {
         }
 
         // Seek to near buffer edge to load next segments
-        if (bufferedEnd > v.currentTime + 8) {
-          v.currentTime = bufferedEnd - 2;
+        if (bufferedEnd > v.currentTime + bMargin) {
+          v.currentTime = bufferedEnd - sOffset;
         }
 
         // Resume if stalled
         if (v.paused && !v.ended) v.play().catch(() => {});
 
         return { done: false, currentTime: v.currentTime, bufferedEnd, duration: v.duration };
-      }, job.clipMode, job.clipStart || 0, job.clipEnd || 999999);
+      }, job.clipMode, job.clipStart || 0, job.clipEnd || 999999, bufferMargin, seekOffset);
 
       if (state.gone) {
         console.log(`[Downloader] ⚠️ Video element gone — player closed. Chunks: ${chunkBuffers.length}`);
