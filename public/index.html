@@ -90,6 +90,12 @@
     .action-play{color:#f97316;display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:600;font-size:13px;cursor:pointer;background:none;border:none;transition:color .2s}
     .action-play:hover{color:#fdba74}
     
+    .link-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;letter-spacing:0.5px;transition:all 0.2s;width:100%;text-align:center;border:1px solid transparent}
+    .link-btn-1{background:rgba(96,165,250,0.1);color:#60a5fa;border-color:rgba(96,165,250,0.2)}
+    .link-btn-1:hover{background:rgba(96,165,250,0.2);transform:translateY(-1px)}
+    .link-btn-2{background:rgba(192,132,252,0.1);color:#c084fc;border-color:rgba(192,132,252,0.2)}
+    .link-btn-2:hover{background:rgba(192,132,252,0.2);transform:translateY(-1px)}
+    
     .status-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%}
     .status-icon.success{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
     .status-icon.error{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
@@ -426,9 +432,15 @@ function renderDashboard(data) {
     }
 
     let actionHtml = '';
+    let partNumStr = '';
+    if (item.clip_start != null) {
+      const pNum = Math.floor(item.clip_start / 3600) + 1;
+      partNumStr = `PART ${pNum} `;
+    }
+
     if (item.uploaded_url || item.uploaded_url_2) {
-      if (item.uploaded_url) actionHtml += `<a href="${item.uploaded_url}" target="_blank" class="action-play" style="color:#60a5fa">${getPlayIcon()} PART 1</a><br/>`;
-      if (item.uploaded_url_2) actionHtml += `<a href="${item.uploaded_url_2}" target="_blank" class="action-play" style="color:#c084fc; margin-top: 4px;">${getPlayIcon()} PART 2</a>`;
+      if (item.uploaded_url) actionHtml += `<a href="${item.uploaded_url}" target="_blank" class="link-btn link-btn-1">${getPlayIcon()} ${partNumStr}LINK 1</a><br/>`;
+      if (item.uploaded_url_2) actionHtml += `<a href="${item.uploaded_url_2}" target="_blank" class="link-btn link-btn-2" style="margin-top:6px;">${getPlayIcon()} ${partNumStr}LINK 2</a>`;
     } else if (!isExpired) {
       actionHtml = `
         <a href="/api/download/${item.id}" class="action-play">${getPlayIcon()} Play</a>
