@@ -76,8 +76,35 @@ async function startDownload(job, sessionMgr, broadcast) {
   const chunkBuffers = [];
   let   chunkSeq     = 0;
   let   page         = null;
+  let   resumeStart  = 0;
 
   try {
+    const statePath = path.join(jobDir, 'state.json');
+    if (fs.existsSync(statePath)) {
+      try {
+        const stateData = JSON.parse(fs.readFileSync(statePath));
+        if (stateData.resumeStart) resumeStart = stateData.resumeStart;
+        if (stateData.chunkSeq) chunkSeq = stateData.chunkSeq;
+        console.log(`[Downloader] Resuming job ${job.id} from ${resumeStart.toFixed(1)}s, sequence ${chunkSeq}`);
+      } catch(e) {}
+    }
+
+    const existingChunks = fs.readdirSync(jobDir).filter(f => f.startsWith('chunk_') && f.endsWith('.ts'));
+    for (const f of existingChunks) {
+      const match = f.match(/chunk_(\d+)\.ts/);
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        const file = path.join(jobDir, f);
+        try {
+          const buf = fs.readFileSync(file);
+          const pts = readPTS(buf);
+          chunkBuffers.push({ seq, file, pts });
+          chunkSeq = Math.max(chunkSeq, seq + 1);
+        } catch(e) {}
+      }
+    }
+    chunkBuffers.sort((a,b) => a.seq - b.seq);
+
     // ── Open a new tab (don't disturb the user's existing tabs) ──────────────
     page = await browser.newPage();
 
@@ -102,9 +129,11 @@ async function startDownload(job, sessionMgr, broadcast) {
         const buf = Buffer.from(base64Data, 'base64');
         if (buf.length > 500) {
           const pts = readPTS(buf);
-          chunkBuffers.push({ seq: chunkSeq++, buffer: buf, pts });
+          const file = path.join(jobDir, `chunk_${String(chunkSeq).padStart(6, '0')}.ts`);
+          fs.writeFileSync(file, buf);
+          chunkBuffers.push({ seq: chunkSeq++, file, pts });
           if (chunkSeq % 5 === 0 || chunkSeq === 1) {
-            console.log(`[Downloader] Chunk #${chunkSeq} (${(buf.length/1024).toFixed(0)}KB, PTS:${pts != null ? pts.toFixed(1)+'s' : 'n/a'})`);
+            console.log(`[Downloader] Chunk #${chunkSeq-1} (${(buf.length/1024).toFixed(0)}KB, PTS:${pts != null ? pts.toFixed(1)+'s' : 'n/a'})`);
           }
         }
       } catch(e) { console.error('[Chunk CB]', e.message); }
@@ -216,14 +245,16 @@ async function startDownload(job, sessionMgr, broadcast) {
     // the buffer runs dry in 2s causing repeated stalls until the player dies.
     // Instead: play muted at 1x, then every tick seek to the buffer edge.
     // This keeps the player healthy while forcing continuous segment loading.
-    await page.evaluate((clipMode, clipStart) => {
+    await page.evaluate((clipMode, clipStart, resumeStart) => {
       const v = document.querySelector('video');
       if (!v) return;
       v.muted  = true;
       v.volume = 0;
-      if (clipMode && clipStart > 0) v.currentTime = clipStart;
+      let startPos = clipMode && clipStart > 0 ? clipStart : 0;
+      if (resumeStart > startPos) startPos = resumeStart;
+      if (startPos > 0) v.currentTime = startPos;
       v.play().catch(() => {});
-    }, job.clipMode, job.clipStart || 0);
+    }, job.clipMode, job.clipStart || 0, resumeStart);
 
     // Wait for first chunk to arrive
     await new Promise(r => setTimeout(r, 2000));
@@ -303,6 +334,13 @@ async function startDownload(job, sessionMgr, broadcast) {
 
       // Progress + ETA
       if (state.duration) {
+        try {
+          fs.writeFileSync(statePath, JSON.stringify({
+            resumeStart: state.bufferedEnd > 2 ? state.bufferedEnd - 2 : 0,
+            chunkSeq: chunkSeq
+          }));
+        } catch(e) {}
+
         const start   = job.clipMode ? (job.clipStart || 0) : 0;
         const end     = job.clipMode ? (job.clipEnd || state.duration) : state.duration;
         const prog    = Math.min(1, Math.max(0, (state.currentTime - start) / (end - start)));
@@ -343,13 +381,8 @@ async function startDownload(job, sessionMgr, broadcast) {
       }
     }
 
-    // Write .ts files
-    const chunkFiles = [];
-    for (let i = 0; i < toWrite.length; i++) {
-      const p = path.join(jobDir, `chunk_${String(i).padStart(6, '0')}.ts`);
-      fs.writeFileSync(p, toWrite[i].buffer);
-      chunkFiles.push(p);
-    }
+    // Collect .ts file paths
+    const chunkFiles = toWrite.map(c => c.file);
 
     // ── Remux with ffmpeg ─────────────────────────────────────────────────────
     const concatPath = path.join(jobDir, 'concat.txt');
@@ -393,14 +426,11 @@ async function startDownload(job, sessionMgr, broadcast) {
     const thumbPath = path.join(jobDir, 'thumb.gif');
     try {
       const gifDur = job.gifDuration || 3;
-      if (videoDuration > gifDur * 2) {
-        const speed = (gifDur / videoDuration).toFixed(5);
-        const filter = `setpts=${speed}*PTS,fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
-        await execAsync(`ffmpeg -v error -y -skip_frame nokey -i "${outputPath}" -vf "${filter}" -t ${gifDur} -loop 0 "${thumbPath}"`);
-      } else {
-        const filter = `fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
-        await execAsync(`ffmpeg -v error -y -i "${outputPath}" -t ${gifDur} -vf "${filter}" -loop 0 "${thumbPath}"`);
-      }
+      const gifStart = Math.max(0, videoDuration * 0.3); // Start roughly 30% into the video
+      const filter = `fps=10,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
+      
+      // Capture at normal speed
+      await execAsync(`ffmpeg -v error -y -ss ${gifStart.toFixed(2)} -i "${outputPath}" -t ${gifDur} -vf "${filter}" -loop 0 "${thumbPath}"`);
     } catch(e) {
       console.warn('[Downloader] Failed to generate GIF thumbnail:', e.message);
       // Fallback to static jpg
@@ -422,7 +452,7 @@ async function startDownload(job, sessionMgr, broadcast) {
   } catch(err) {
     if (page) { try { await page.close(); } catch(e) {} }
     if (browser) { await browser.disconnect().catch(() => {}); }
-    try { fs.rmSync(jobDir, { recursive: true, force: true }); } catch(e) {}
+    // Intentionally keep jobDir so that the background worker can resume it later
     throw err;
   }
 }
