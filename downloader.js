@@ -407,16 +407,6 @@ async function startDownload(job, sessionMgr, broadcast) {
     chunkBuffers.sort((a, b) => a.seq - b.seq);
     let toWrite = chunkBuffers;
 
-    if (job.clipMode && job.clipEnd != null) {
-      const ptsFiltered = chunkBuffers.filter(c =>
-        c.pts === null || (c.pts >= job.clipStart - 10 && c.pts <= job.clipEnd + 10)
-      );
-      if (ptsFiltered.length > 0) {
-        toWrite = ptsFiltered;
-        console.log(`[Downloader] Clip: ${toWrite.length} of ${chunkBuffers.length} chunks`);
-      }
-    }
-
     // Collect .ts file paths
     const chunkFiles = toWrite.map(c => c.file);
 
@@ -428,18 +418,7 @@ async function startDownload(job, sessionMgr, broadcast) {
     );
 
     const outputPath = path.join(jobDir, 'output.mp4');
-    let   ffmpegCmd  = `ffmpeg -y -f concat -safe 0 -i "${concatPath}"`;
-
-    if (job.clipMode && toWrite.length > 0) {
-      const firstPts = toWrite.find(c => c.pts !== null)?.pts;
-      if (firstPts != null) {
-        const ssOffset = Math.max(0, job.clipStart - firstPts);
-        const duration = job.clipEnd - job.clipStart;
-        if (ssOffset > 0.5) ffmpegCmd += ` -ss ${ssOffset.toFixed(3)}`;
-        ffmpegCmd += ` -t ${duration.toFixed(3)}`;
-      }
-    }
-    ffmpegCmd += ` -c copy -movflags +faststart "${outputPath}"`;
+    let   ffmpegCmd  = `ffmpeg -y -f concat -safe 0 -i "${concatPath}" -c copy -movflags +faststart "${outputPath}"`;
 
     job.progress = 95;
     broadcast(job);

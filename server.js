@@ -256,13 +256,23 @@ app.get('/api/download/:jobId', (req, res) => {
 
   // Fetch from DB to know if it's clip or full for the filename
   let clipMode = false;
+  let videoUrl = 'video';
   try {
     const db = require('./db');
-    const hist = db.prepare('SELECT is_clip FROM history WHERE id = ?').get(jobId);
-    if (hist) clipMode = hist.is_clip;
+    const hist = db.prepare('SELECT is_clip, video_url FROM history WHERE id = ?').get(jobId);
+    if (hist) {
+      clipMode = hist.is_clip;
+      if (hist.video_url) {
+        // extract e.g. "username_video_123" from recu.me/username/video/123/play
+        const match = hist.video_url.match(/recu\.me\/([^\/]+)\/video\/([^\/]+)/);
+        if (match) videoUrl = `${match[1]}_${match[2]}`;
+      }
+    }
   } catch(e) {}
 
-  const filename = `ekkoscope_${clipMode ? 'clip' : 'full'}_${Date.now()}.mp4`;
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}-${String(d.getMinutes()).padStart(2,'0')}`;
+  const filename = `${videoUrl}_${clipMode ? 'clip' : 'full'}_${dateStr}.mp4`;
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Content-Type', 'video/mp4');
   const stream = fs.createReadStream(filePath);

@@ -427,8 +427,8 @@ function renderDashboard(data) {
 
     let actionHtml = '';
     if (item.uploaded_url || item.uploaded_url_2) {
-      if (item.uploaded_url) actionHtml += `<a href="${item.uploaded_url}" target="_blank" class="action-play" style="color:#60a5fa">${getPlayIcon()} LINK FOR VIDEO 1</a><br/>`;
-      if (item.uploaded_url_2) actionHtml += `<a href="${item.uploaded_url_2}" target="_blank" class="action-play" style="color:#c084fc; margin-top: 4px;">${getPlayIcon()} LINK FOR VIDEO 2</a>`;
+      if (item.uploaded_url) actionHtml += `<a href="${item.uploaded_url}" target="_blank" class="action-play" style="color:#60a5fa">${getPlayIcon()} PART 1</a><br/>`;
+      if (item.uploaded_url_2) actionHtml += `<a href="${item.uploaded_url_2}" target="_blank" class="action-play" style="color:#c084fc; margin-top: 4px;">${getPlayIcon()} PART 2</a>`;
     } else if (!isExpired) {
       actionHtml = `
         <a href="/api/download/${item.id}" class="action-play">${getPlayIcon()} Play</a>
