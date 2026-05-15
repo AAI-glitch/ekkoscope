@@ -263,7 +263,6 @@ async function startDownload(job, sessionMgr, broadcast) {
     const scrubStart   = Date.now();
     let   lastCount    = 0;
     let   stuckCounter = 0;
-    const STUCK_LIMIT  = 40; // 40 × interval = done
 
     // Fetch dynamic performance settings
     let seekInterval = 500;
@@ -278,6 +277,8 @@ async function startDownload(job, sessionMgr, broadcast) {
       const sOff = db.prepare("SELECT value FROM settings WHERE key = 'seek_offset'").get();
       if (sOff && sOff.value) seekOffset = parseInt(sOff.value, 10);
     } catch(e) {}
+
+    const STUCK_LIMIT = Math.ceil(20000 / seekInterval); // Wait 20 seconds before giving up
 
     while (true) {
       await new Promise(r => setTimeout(r, seekInterval));

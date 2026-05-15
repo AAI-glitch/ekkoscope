@@ -50,7 +50,7 @@ function broadcast(job) {
     try {
       const db = require('./db');
       db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, duration, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(job.id, job.userId, job.url, job.clipMode ? 1 : 0, job.duration || null, job.clipStart || null, job.clipEnd || null);
+        .run(job.id, job.userId, job.url, job.clipMode ? 1 : 0, job.duration ?? null, job.clipStart ?? null, job.clipEnd ?? null);
         
       // Trigger auto-upload in the background if API keys exist
       try {
@@ -679,7 +679,7 @@ async function processBacklog() {
           if (j.status === 'complete' && !j.backlogHandled) {
             j.backlogHandled = true;
             db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(j.backlogId);
-            db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0, j.clipStart || null, j.clipEnd || null);
+            db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0, j.clipStart ?? null, j.clipEnd ?? null);
             
             const setting1 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
             const apiKey1 = setting1 ? setting1.value : null;
