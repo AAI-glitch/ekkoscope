@@ -58,4 +58,12 @@ try {
   db.prepare("ALTER TABLE history ADD COLUMN duration INTEGER").run();
 } catch (err) {}
 
+try {
+  db.prepare("ALTER TABLE history ADD COLUMN clip_start INTEGER").run();
+} catch (err) {}
+
+try {
+  db.prepare("ALTER TABLE history ADD COLUMN clip_end INTEGER").run();
+} catch (err) {}
+
 module.exports = db;

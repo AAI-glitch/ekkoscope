@@ -334,6 +334,42 @@ async function startDownload(job, sessionMgr, broadcast) {
 
       // Progress + ETA
       if (state.duration) {
+        // Dynamic 1-hour splitting logic
+        if (!job.hasSplit) {
+          job.hasSplit = true;
+          const targetEnd = job.clipMode && job.clipEnd ? job.clipEnd : state.duration;
+          const start = job.clipMode && job.clipStart ? job.clipStart : 0;
+          
+          if (targetEnd - start > 3600) {
+            console.log(`[Downloader] Video is > 1 hour, truncating to 1h and queuing the rest.`);
+            job.clipMode = true;
+            job.clipEnd = start + 3600;
+            
+            if (job.userId && !job.isBacklogRetry) {
+              try {
+                const db = require('./db');
+                const { v4: uuidv4 } = require('uuid');
+                
+                let nextStart = start + 3600;
+                let partNum = 2;
+                while (nextStart < targetEnd) {
+                  let nextEnd = Math.min(nextStart + 3600, targetEnd);
+                  const backlogId = uuidv4();
+                  db.prepare(`
+                    INSERT INTO backlog (id, user_id, video_url, is_clip, clip_start, clip_end, notify_email, status)
+                    VALUES (?, ?, ?, 1, ?, ?, ?, 'pending')
+                  `).run(backlogId, job.userId, job.url, nextStart, nextEnd, job.notifyEmail ? 1 : 0);
+                  console.log(`[Downloader] Queued backlog job for Part ${partNum} (${nextStart} to ${nextEnd})`);
+                  nextStart += 3600;
+                  partNum++;
+                }
+              } catch(e) {
+                console.error('[Downloader] Failed to split into backlog jobs:', e);
+              }
+            }
+          }
+        }
+
         try {
           fs.writeFileSync(statePath, JSON.stringify({
             resumeStart: state.bufferedEnd > 2 ? state.bufferedEnd - 2 : 0,

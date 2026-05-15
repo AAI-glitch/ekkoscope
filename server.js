@@ -49,8 +49,34 @@ function broadcast(job) {
     job.historyLogged = true;
     try {
       const db = require('./db');
-      db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, duration) VALUES (?, ?, ?, ?, ?)')
-        .run(job.id, job.userId, job.url, job.clipMode ? 1 : 0, job.duration || null);
+      db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, duration, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(job.id, job.userId, job.url, job.clipMode ? 1 : 0, job.duration || null, job.clipStart || null, job.clipEnd || null);
+        
+      // Trigger auto-upload in the background if API keys exist
+      try {
+        const setting1 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
+        const apiKey1 = setting1 ? setting1.value : null;
+        const setting2 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key_2'").get();
+        const apiKey2 = setting2 ? setting2.value : null;
+        
+        if (apiKey1 || apiKey2) {
+           console.log(`[Server] Auto-uploading job ${job.id} to cloud...`);
+           uploadJobs.set(job.id, { status: 'uploading', progress: 0, error: null });
+           const promises = [];
+           const fp = path.join(__dirname, 'tmp_jobs', job.id, 'output.mp4');
+           if (apiKey1) promises.push(uploadVideoToCloud(job.id, fp, apiKey1).catch(e => { console.error('DoodAPI auto-upload error:', e.message); throw e; }));
+           if (apiKey2) promises.push(uploadToKrakenFiles(job.id, fp, apiKey2).catch(e => { console.error('KrakenFiles auto-upload error:', e.message); throw e; }));
+           
+           Promise.all(promises).then(() => {
+               uploadJobs.set(job.id, { status: 'complete' });
+               console.log(`[Server] Auto-upload completed for job ${job.id}`);
+           }).catch(err => {
+               uploadJobs.set(job.id, { status: 'error', error: err.message });
+           });
+        }
+      } catch (upErr) {
+        console.error('[Server] Failed to trigger auto-upload:', upErr);
+      }
         
       if (job.notifyEmail && job.userEmail) {
         const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'success_email_msg'").get();
@@ -542,8 +568,8 @@ app.post('/api/admin/backlog/fulfill', (req, res) => {
 
   try {
     db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(id);
-    db.prepare('INSERT OR IGNORE INTO history (id, user_id, video_url, is_clip) VALUES (?, ?, ?, ?)')
-      .run(item.id, item.user_id, item.video_url, item.is_clip ? 1 : 0);
+    db.prepare('INSERT OR IGNORE INTO history (id, user_id, video_url, is_clip, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(item.id, item.user_id, item.video_url, item.is_clip ? 1 : 0, item.clip_start || null, item.clip_end || null);
     
     if (cloudUrl1) db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(cloudUrl1, item.id);
     if (cloudUrl2) db.prepare('UPDATE history SET uploaded_url_2 = ? WHERE id = ?').run(cloudUrl2, item.id);
@@ -637,7 +663,7 @@ async function processBacklog() {
           if (j.status === 'complete' && !j.backlogHandled) {
             j.backlogHandled = true;
             db.prepare("UPDATE backlog SET status = 'completed' WHERE id = ?").run(j.backlogId);
-            db.prepare('INSERT INTO history (id, user_id, video_url, is_clip) VALUES (?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0);
+            db.prepare('INSERT INTO history (id, user_id, video_url, is_clip, clip_start, clip_end) VALUES (?, ?, ?, ?, ?, ?)').run(j.id, j.userId, j.url, j.clipMode ? 1 : 0, j.clipStart || null, j.clipEnd || null);
             
             const setting1 = db.prepare("SELECT value FROM settings WHERE key = 'upload_api_key'").get();
             const apiKey1 = setting1 ? setting1.value : null;
