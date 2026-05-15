@@ -250,7 +250,7 @@ async function startDownload(job, sessionMgr, broadcast) {
       if (!v) return;
       v.muted  = true;
       v.volume = 0;
-      let startPos = clipMode && clipStart > 0 ? clipStart : 0;
+      let startPos = clipMode && clipStart > 0 ? clipStart : 0.5;
       if (resumeStart > startPos) startPos = resumeStart;
       v.currentTime = startPos;
       v.play().catch(() => {});
@@ -305,10 +305,10 @@ async function startDownload(job, sessionMgr, broadcast) {
 
         // Force jump if we are far behind the start time in clip mode
         if (v.currentTime < currentStart - 5) {
-          v.currentTime = Math.max(0, currentStart - 2);
+          v.currentTime = Math.max(0.5, currentStart - 2);
         } else if (target && v.currentTime > target + 15) {
           // If the player jumped way ahead (e.g., site auto-resume), pull it back
-          v.currentTime = Math.max(0, currentStart);
+          v.currentTime = Math.max(0.5, currentStart);
         }
 
         // Seek to near buffer edge to load next segments
