@@ -95,6 +95,12 @@ function broadcast(job) {
         const successMsg = msgSetting?.value || "Your requested video has been successfully downloaded by Ekkoscope.";
         sendEmail(job.userEmail, 'Your Video Download is Ready!', `${successMsg}\n\nVideo URL: ${job.url}\n\nYou can access it from your dashboard.`);
       }
+      
+      // Trigger backlog processing shortly after completion to start next parts
+      setTimeout(() => {
+        if (typeof processBacklog === 'function') processBacklog();
+      }, 5000);
+      
     } catch (e) {
       console.error('Failed to log history/send email:', e);
     }
@@ -719,6 +725,10 @@ setInterval(() => {
 let backlogTimer = null;
 
 async function processBacklog() {
+  if (backlogTimer) {
+    clearTimeout(backlogTimer);
+    backlogTimer = null;
+  }
   try {
     const db = require('./db');
     // Fetch interval in minutes, default 15
