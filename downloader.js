@@ -428,8 +428,20 @@ async function startDownload(job, sessionMgr, broadcast) {
     job.progress = 88;
     broadcast(job);
 
-    chunkBuffers.sort((a, b) => a.seq - b.seq);
-    let toWrite = chunkBuffers;
+    const startBound = job.clipMode ? (job.clipStart || 0) : 0;
+    const endBound   = job.clipMode ? (job.clipEnd || job.duration || 999999) : 999999;
+
+    let toWrite = chunkBuffers.filter(c => {
+      if (c.pts == null) return true; // Keep chunks if PTS parsing failed
+      // Give a generous 40-second margin to allow for normal HLS boundaries
+      return c.pts >= startBound - 40 && c.pts <= endBound + 40;
+    });
+
+    // Sort by PTS if possible, otherwise fallback to sequence number
+    toWrite.sort((a, b) => {
+      if (a.pts != null && b.pts != null) return a.pts - b.pts;
+      return a.seq - b.seq;
+    });
 
     // Collect .ts file paths
     const chunkFiles = toWrite.map(c => c.file);

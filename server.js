@@ -647,6 +647,21 @@ async function processBacklog() {
     const intervalStr = db.prepare("SELECT value FROM settings WHERE key = 'retry_interval'").get()?.value;
     const intervalMin = parseInt(intervalStr, 10) || 15;
     
+    // Check if there is an active download running
+    let activeRunning = false;
+    for (const [id, job] of jobs.entries()) {
+      if (job.status !== 'complete' && job.status !== 'error') {
+        activeRunning = true;
+        break;
+      }
+    }
+
+    if (activeRunning) {
+      console.log(`[Backlog Worker] An active download is currently running. Skipping this cycle.`);
+      backlogTimer = setTimeout(processBacklog, intervalMin * 60 * 1000);
+      return;
+    }
+
     // Process 1 pending item
     const item = db.prepare("SELECT b.*, u.email FROM backlog b JOIN users u ON b.user_id = u.id WHERE b.status = 'pending' LIMIT 1").get();
     
