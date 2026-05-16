@@ -276,8 +276,8 @@ const autoFmt = (e) => {
 document.getElementById('clip-start').addEventListener('input', autoFmt);
 document.getElementById('clip-end').addEventListener('input', autoFmt);
 
-const STATUS_LABELS = { queued:'Queued', launching:'Browser', logging_in:'Auth', navigating:'Loading', stealing:'Stealing', downloading:'Downloading', remuxing:'Converting', complete:'Done', error:'Error', refreshing_session:'Auth Refresh' };
-const STATUS_CLASSES = { stealing:'stealing', downloading:'stealing', remuxing:'remuxing', complete:'complete', error:'error' };
+const STATUS_LABELS = { queued:'Queued', launching:'Browser', logging_in:'Auth', navigating:'Loading', stealing:'Stealing', downloading:'Downloading', remuxing:'Converting', uploading:'Uploading', complete:'Done', error:'Error', refreshing_session:'Auth Refresh' };
+const STATUS_CLASSES = { stealing:'stealing', downloading:'stealing', remuxing:'remuxing', uploading:'uploading', complete:'complete', error:'error' };
 
 // UI Initialization
 let globalStartMsg = "Your video will be downloaded in a few minutes.";
@@ -370,7 +370,21 @@ function renderDashboard(data) {
   for (const [jobId, job] of Object.entries(activeJobs)) {
     let statIcon = job.error ? getErrorIcon() : getPendingIcon();
     let msgHtml = job.error ? `<span style="color:#ef4444">${job.error}</span><br/><span style="font-size:11px;color:var(--muted)">${failedMsg}</span>` : `<span id="txt-${jobId}">${job.progress||0}% • ${job.chunksStolen||0} Chunks</span>`;
-    if (job.status === 'complete') { statIcon = getSuccessIcon(); msgHtml = `<span style="color:#10b981">Download successful!</span>`; }
+    
+    if (job.status === 'remuxing') {
+      msgHtml = `<span style="color:#c084fc" id="txt-${jobId}">⚙️ Converting... ${job.progress||0}%</span>`;
+    } else if (job.status === 'uploading') {
+      msgHtml = `<span style="color:#60a5fa" id="txt-${jobId}">☁️ Uploading... ${job.progress||0}%</span>`;
+    }
+
+    if (job.status === 'complete') { 
+      statIcon = getSuccessIcon(); 
+      if (job.error) {
+        msgHtml = `<span style="color:#10b981">Downloaded</span><br/><span style="color:#ef4444;font-size:11px">${job.error}</span>`;
+      } else {
+        msgHtml = `<span style="color:#10b981">Download successful!</span>`; 
+      }
+    }
 
     html += `
       <tr id="job-${jobId}">
@@ -628,7 +642,13 @@ function handleSSE(jobId, jsonData, es) {
   // Quick update for progress
   const txtEl = document.getElementById('txt-'+jobId);
   if (txtEl && !d.error && d.status !== 'complete') {
-    txtEl.textContent = `${d.progress||0}% • ${d.chunksStolen||0} Chunks`;
+    if (d.status === 'uploading') {
+      txtEl.innerHTML = `☁️ Uploading... ${d.progress||0}%`;
+    } else if (d.status === 'remuxing') {
+      txtEl.innerHTML = `⚙️ Converting... ${d.progress||0}%`;
+    } else {
+      txtEl.innerHTML = `${d.progress||0}% • ${d.chunksStolen||0} Chunks`;
+    }
   }
   const etaEl = document.getElementById('eta-'+jobId);
   if (etaEl && !d.error && d.status !== 'complete') {

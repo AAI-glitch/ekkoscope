@@ -61,6 +61,9 @@ function broadcast(job) {
         
         if (apiKey1 || apiKey2) {
            console.log(`[Server] Auto-uploading job ${job.id} to cloud...`);
+           job.status = 'uploading';
+           job.progress = 0;
+           job.eta = null;
            uploadJobs.set(job.id, { status: 'uploading', progress: 0, error: null });
            const promises = [];
            const fp = path.join(__dirname, 'tmp_jobs', job.id, 'output.mp4');
@@ -68,10 +71,19 @@ function broadcast(job) {
            if (apiKey2) promises.push(uploadToKrakenFiles(job.id, fp, apiKey2).catch(e => { console.error('KrakenFiles auto-upload error:', e.message); throw e; }));
            
            Promise.all(promises).then(() => {
+               job.status = 'complete';
+               job.progress = 100;
                uploadJobs.set(job.id, { status: 'complete' });
                console.log(`[Server] Auto-upload completed for job ${job.id}`);
+               const payload = JSON.stringify({ status: job.status, progress: job.progress, eta: job.eta, chunksStolen: job.chunksStolen || 0, error: null });
+               job.clients.forEach(send => send(payload));
            }).catch(err => {
+               job.status = 'complete'; // Download was successful
+               job.progress = 100;
+               job.error = 'Upload Failed: ' + err.message;
                uploadJobs.set(job.id, { status: 'error', error: err.message });
+               const payload = JSON.stringify({ status: job.status, progress: job.progress, eta: job.eta, chunksStolen: job.chunksStolen || 0, error: job.error });
+               job.clients.forEach(send => send(payload));
            });
         }
       } catch (upErr) {
@@ -334,6 +346,13 @@ async function uploadVideoToCloud(jobId, filePath, apiKey) {
       if (totalLength) {
         const pct = Math.round((uploadedBytes / totalLength) * 100);
         uploadJobs.set(jobId, { status: 'uploading', progress: pct });
+        
+        const j = jobs.get(jobId);
+        if (j && j.status === 'uploading') {
+            j.progress = pct;
+            const p = JSON.stringify({ status: 'uploading', progress: pct });
+            j.clients.forEach(send => send(p));
+        }
       }
       callback(null, chunk);
     }
@@ -374,7 +393,35 @@ async function uploadToKrakenFiles(jobId, filePath, apiKey) {
   const headers = form.getHeaders();
   headers['X-AUTH-TOKEN'] = apiKey;
 
-  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form, headers: headers });
+  const https = require('https');
+  const agent = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
+
+  const util = require('util');
+  const getLength = util.promisify(form.getLength).bind(form);
+  let totalLength = 0;
+  try { totalLength = await getLength(); headers['Content-Length'] = totalLength; } catch (e) {}
+
+  const { Transform } = require('stream');
+  let uploadedBytes = 0;
+  const progressStream = new Transform({
+    transform(chunk, encoding, callback) {
+      uploadedBytes += chunk.length;
+      if (totalLength) {
+        const pct = Math.round((uploadedBytes / totalLength) * 100);
+        uploadJobs.set(jobId, { status: 'uploading', progress: pct });
+        
+        const j = jobs.get(jobId);
+        if (j && j.status === 'uploading') {
+            j.progress = pct;
+            const p = JSON.stringify({ status: 'uploading', progress: pct });
+            j.clients.forEach(send => send(p));
+        }
+      }
+      callback(null, chunk);
+    }
+  });
+
+  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent });
   const uploadData = await uploadRes.json();
 
   if (uploadData.status === 200 && uploadData.data.url) {
@@ -631,6 +678,14 @@ setInterval(() => {
     for (const [id, job] of jobs.entries()) {
       if (job.status === 'complete' || job.status === 'error') {
         if (now - job.startTime > maxAge) jobs.delete(id);
+      } else {
+        // Prevent forever-stuck jobs from blocking Backlog Worker queue
+        if (now - job.startTime > 2 * 60 * 60 * 1000) {
+           console.log(`[Cleanup] Force clearing stuck job: ${id}`);
+           job.status = 'error';
+           job.error = 'Job timed out after 2 hours';
+           jobs.delete(id);
+        }
       }
     }
   } catch (err) {
@@ -706,19 +761,30 @@ async function processBacklog() {
             if (apiKey1) {
                try {
                   console.log(`[Backlog Worker] Starting DoodAPI cloud upload for ${j.id}`);
+                  j.status = 'uploading'; j.progress = 0;
+                  uploadJobs.set(j.id, { status: 'uploading', progress: 0, error: null });
                   cloudUrls.push(await uploadVideoToCloud(j.id, j.filePath, apiKey1));
                } catch (e) {
                   console.error(`[Backlog Worker] DoodAPI Upload failed:`, e.message);
+                  j.error = 'DoodAPI Upload Failed: ' + e.message;
                }
             }
             if (apiKey2) {
                try {
                   console.log(`[Backlog Worker] Starting KrakenFiles cloud upload for ${j.id}`);
+                  j.status = 'uploading'; j.progress = 0;
+                  uploadJobs.set(j.id, { status: 'uploading', progress: 0, error: null });
                   cloudUrls.push(await uploadToKrakenFiles(j.id, j.filePath, apiKey2));
                } catch (e) {
                   console.error(`[Backlog Worker] KrakenFiles Upload failed:`, e.message);
+                  j.error = 'KrakenFiles Upload Failed: ' + e.message;
                }
             }
+            
+            j.status = 'complete';
+            j.progress = 100;
+            const p = JSON.stringify({ status: j.status, progress: j.progress, error: j.error });
+            j.clients.forEach(send => send(p));
 
             if (j.notifyEmail) {
               const { sendEmail } = require('./mailer');
