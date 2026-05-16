@@ -358,16 +358,27 @@ async function uploadVideoToCloud(jobId, filePath, apiKey) {
     }
   });
 
-  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent });
-  const textData = await uploadRes.text();
-  const uploadData = JSON.parse(textData);
+  const AbortController = globalThis.AbortController || require('abort-controller');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2 * 60 * 60 * 1000); // 2 hour max upload time
 
-  if (uploadData.result && uploadData.result.length > 0) {
-    const downloadedUrl = uploadData.result[0].download_url;
-    db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(downloadedUrl, jobId);
-    return downloadedUrl;
-  } else {
-    throw new Error('Upload failed remotely');
+  try {
+    const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent, signal: controller.signal });
+    clearTimeout(timeoutId);
+    const textData = await uploadRes.text();
+    const uploadData = JSON.parse(textData);
+
+    if (uploadData.result && uploadData.result.length > 0) {
+      const downloadedUrl = uploadData.result[0].download_url;
+      db.prepare('UPDATE history SET uploaded_url = ? WHERE id = ?').run(downloadedUrl, jobId);
+      return downloadedUrl;
+    } else {
+      throw new Error('Upload failed remotely');
+    }
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') throw new Error('Upload timed out after 2 hours');
+    throw err;
   }
 }
 
@@ -421,15 +432,26 @@ async function uploadToKrakenFiles(jobId, filePath, apiKey) {
     }
   });
 
-  const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent });
-  const uploadData = await uploadRes.json();
+  const AbortController = globalThis.AbortController || require('abort-controller');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2 * 60 * 60 * 1000); // 2 hour max upload time
 
-  if (uploadData.status === 200 && uploadData.data.url) {
-    const downloadedUrl = uploadData.data.url;
-    db.prepare('UPDATE history SET uploaded_url_2 = ? WHERE id = ?').run(downloadedUrl, jobId);
-    return downloadedUrl;
-  } else {
-    throw new Error(uploadData.data?.message || 'KrakenFiles Upload failed remotely');
+  try {
+    const uploadRes = await fetch(uploadUrl, { method: 'POST', body: form.pipe(progressStream), headers: headers, agent: agent, signal: controller.signal });
+    clearTimeout(timeoutId);
+    const uploadData = await uploadRes.json();
+
+    if (uploadData.status === 200 && uploadData.data.url) {
+      const downloadedUrl = uploadData.data.url;
+      db.prepare('UPDATE history SET uploaded_url_2 = ? WHERE id = ?').run(downloadedUrl, jobId);
+      return downloadedUrl;
+    } else {
+      throw new Error(uploadData.data?.message || 'KrakenFiles Upload failed remotely');
+    }
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') throw new Error('Upload timed out after 2 hours');
+    throw err;
   }
 }
 
@@ -680,10 +702,10 @@ setInterval(() => {
         if (now - job.startTime > maxAge) jobs.delete(id);
       } else {
         // Prevent forever-stuck jobs from blocking Backlog Worker queue
-        if (now - job.startTime > 2 * 60 * 60 * 1000) {
+        if (now - job.startTime > 4 * 60 * 60 * 1000) {
            console.log(`[Cleanup] Force clearing stuck job: ${id}`);
            job.status = 'error';
-           job.error = 'Job timed out after 2 hours';
+           job.error = 'Job timed out after 4 hours';
            jobs.delete(id);
         }
       }
@@ -703,10 +725,10 @@ async function processBacklog() {
     const intervalStr = db.prepare("SELECT value FROM settings WHERE key = 'retry_interval'").get()?.value;
     const intervalMin = parseInt(intervalStr, 10) || 15;
     
-    // Check if there is an active download running
+    // Check if there is an active download running (ignore uploading jobs)
     let activeRunning = false;
     for (const [id, job] of jobs.entries()) {
-      if (job.status !== 'complete' && job.status !== 'error') {
+      if (['queued', 'launching', 'navigating', 'stealing', 'downloading', 'remuxing', 'refreshing_session'].includes(job.status)) {
         activeRunning = true;
         break;
       }
