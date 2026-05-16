@@ -735,6 +735,16 @@ async function processBacklog() {
       } catch (err) {
         console.error(`[Backlog Worker] Job ${jobId} failed:`, err);
         db.prepare("UPDATE backlog SET status = 'pending' WHERE id = ?").run(item.id);
+        
+        // Mark the in-memory job as error so it doesn't become a zombie
+        job.status = 'error';
+        job.error = err.message;
+        const payload = JSON.stringify({
+          status: job.status, progress: job.progress,
+          eta: job.eta, chunksStolen: job.chunksStolen, error: job.error
+        });
+        job.clients.forEach(send => send(payload));
+
         if (uploadJobs.has(jobId)) {
           const zJob = uploadJobs.get(jobId);
           zJob.status = 'error';
