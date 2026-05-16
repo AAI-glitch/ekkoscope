@@ -171,6 +171,7 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
   jobs.set(jobId, job);
 
   const handleJobError = (job, err, broadcast) => {
+    console.error(`[Server] Job ${job.id} failed:`, err);
     job.status = 'error';
     job.error = err.message;
     broadcast(job);
@@ -732,12 +733,13 @@ async function processBacklog() {
           }
         });
       } catch (err) {
+        console.error(`[Backlog Worker] Job ${jobId} failed:`, err);
         db.prepare("UPDATE backlog SET status = 'pending' WHERE id = ?").run(item.id);
-        if (uploadJobs.has(activeJobId)) {
-          const zJob = uploadJobs.get(activeJobId);
+        if (uploadJobs.has(jobId)) {
+          const zJob = uploadJobs.get(jobId);
           zJob.status = 'error';
           zJob.error = err.message;
-          uploadJobs.set(activeJobId, zJob);
+          uploadJobs.set(jobId, zJob);
         }
       }
     }
