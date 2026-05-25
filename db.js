@@ -12,6 +12,7 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT,
     google_id TEXT UNIQUE,
+    coins INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -64,6 +65,10 @@ try {
 
 try {
   db.prepare("ALTER TABLE history ADD COLUMN clip_end INTEGER").run();
+} catch (err) {}
+
+try {
+  db.prepare("ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0").run();
 } catch (err) {}
 
 module.exports = db;

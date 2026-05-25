@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ekkoscope — Scheduled Maintenance</title>
+  
+  <script>
+    /* Prevent Light/Dark Mode Flicker */
+    (function() {
+      const theme = localStorage.getItem('ekko_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <!-- Centralized Premium Design System -->
+  <link rel="stylesheet" href="/css/style.css"/>
+  <style>
+    /* Maintenance specific layout adjustments */
+    body {
+      justify-content: center;
+      padding: 24px;
+    }
+    
+    .maintenance-container {
+      width: 100%;
+      max-width: 540px;
+      text-align: center;
+      animation: fadeIn 0.8s ease-out;
+    }
+    
+    .maintenance-card {
+      padding: 48px 36px;
+    }
+
+    .maintenance-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--yellow-bg);
+      border: 1px solid var(--yellow-border);
+      color: var(--yellow-text);
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 30px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+      animation: pulse-animation 2.5s infinite ease-in-out;
+    }
+
+    .maintenance-badge svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+    }
+
+    .maint-title {
+      font-family: var(--font-heading);
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 16px;
+      background: var(--brand-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .maint-message {
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.7;
+      margin-bottom: 32px;
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      box-shadow: var(--shadow-inset);
+      text-align: left;
+    }
+
+    html[data-theme="light"] .maint-message {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .maint-logo {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .maint-logo .logo-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.35);
+    }
+
+    .maint-logo .logo-icon svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .maint-footer {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="maintenance-container">
+    
+    <div class="maint-logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+    </div>
+    
+    <div class="card maintenance-card">
+      <div class="maintenance-badge">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>
+        System Maintenance
+      </div>
+      
+      <h1 class="maint-title">We'll be right back</h1>
+      
+      <p style="color: var(--muted); font-size: 14px; margin-bottom: 24px;">
+        Ekkoscope is temporarily offline while we perform scheduled system maintenance and upgrades.
+      </p>
+      
+      <div class="maint-message" id="custom-message">
+        Loading maintenance details...
+      </div>
+      
+      <p style="color: var(--muted); font-size: 13px;">
+        Thank you for your patience! We'll be back online very shortly.
+      </p>
+      
+      <div class="maint-footer">
+        <span style="font-weight: 700; letter-spacing: 0.5px;">Ekkoscope</span>
+        <button class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle theme">
+          <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+    
+  </div>
+
+  <script>
+    // Theme Switcher Logic
+    const toggleBtn = document.getElementById('theme-toggle-btn');
+    
+    toggleBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('ekko_theme', newTheme);
+    });
+
+    // Fetch custom maintenance message from the public status api
+    async function loadMaintenanceStatus() {
+      try {
+        const res = await fetch('/api/maintenance-status');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('custom-message').textContent = data.message;
+        } else {
+          document.getElementById('custom-message').textContent = "We are currently conducting scheduled maintenance. Please check back shortly!";
+        }
+      } catch (err) {
+        document.getElementById('custom-message').textContent = "We are currently conducting scheduled maintenance. Please check back shortly!";
+      }
+    }
+    loadMaintenanceStatus();
+  </script>
+</body>
+</html>

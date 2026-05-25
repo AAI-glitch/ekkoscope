@@ -4,135 +4,37 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Ekkoscope – Premium Video Downloader</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  
+  <script>
+    /* Prevent Light/Dark Mode Flicker */
+    (function() {
+      const theme = localStorage.getItem('ekko_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{
-      --bg:#040712;--surface:rgba(15,20,40,0.65);--surface-hover:rgba(25,30,50,0.85);
-      --border:rgba(99,102,241,0.2);--border-light:rgba(99,102,241,0.35);
-      --accent:#6366f1;--accent2:#f43f5e;--green:#10b981;--text:#e2e8f0;--muted:#94a3b8;--radius:16px;
-    }
-    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0;overflow-x:hidden}
-    body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 20% 20%,rgba(99,102,241,0.15) 0%,transparent 60%),radial-gradient(ellipse 60% 80% at 80% 80%,rgba(244,63,94,0.12) 0%,transparent 60%);pointer-events:none;z-index:0}
-    
-    /* Header */
-    .header{position:relative;z-index:10;width:100%;max-width:900px;display:flex;justify-content:space-between;align-items:center;padding:24px 20px;margin-bottom:20px}
-    .logo{display:flex;align-items:center;gap:12px}
-    .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(99,102,241,0.3)}
-    .logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-    .logo-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#f9a8d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    
-    .auth-box{display:flex;gap:12px;align-items:center;background:rgba(0,0,0,0.2);border:1px solid var(--border);padding:6px 14px;border-radius:30px;backdrop-filter:blur(10px)}
-    .auth-email{font-size:12px;color:var(--muted);font-weight:500}
-       .main-wrap{position:relative;z-index:1;width:100%;max-width:600px;padding:0 20px;margin: 0 auto 40px auto;}
-    
-    .table-wrap{position:relative;z-index:1;width:100%;max-width:1800px;padding:0 20px;margin: 0 auto 60px auto;}
-    
-    /* Card Standard */
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,0.4);transition:transform 0.3s ease, box-shadow 0.3s ease}
-    .card:hover{transform:translateY(-5px);box-shadow:0 35px 70px rgba(99,102,241,0.2)}
-    
-    .section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px}
-    .url-input{width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);padding:14px 16px;border-radius:12px;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:20px}
-    .url-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15);background:rgba(0,0,0,0.6)}
-    .url-input::placeholder{color:var(--muted)}
-    
-    .clip-row{display:flex;gap:12px;margin-bottom:20px}
-    .clip-field{flex:1}
-    .clip-input{width:100%;background:rgba(0,0,0,0.4);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:all .2s;text-align:center}
-    .clip-input:focus{border-color:var(--accent2);background:rgba(0,0,0,0.6)}
-    .clip-input::placeholder{color:var(--muted)}
-    .clip-label{font-size:11px;color:var(--muted);margin-bottom:6px;display:block}
-    
-    .btn-row{display:flex;gap:12px;flex-direction:column}
-    @media(min-width:480px){ .btn-row{flex-direction:row;} }
-    
-    .btn{flex:1;padding:14px;border:none;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;transition:all .2s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
-    .btn-full{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 20px rgba(79,70,229,0.4)}
-    .btn-full:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(79,70,229,0.5)}
-    .btn-clip{background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;box-shadow:0 4px 20px rgba(244,63,94,0.35)}
-    .btn-clip:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(244,63,94,0.5)}
-    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-    .btn-ghost:hover{background:rgba(255,255,255,0.05)}
-    .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;border-radius:20px}
-    .btn:active{transform:translateY(0)}
-    .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
-    
-    .free-banner{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#6ee7b7;margin-bottom:20px;display:flex;gap:8px;align-items:center}
-    .free-banner svg{flex-shrink:0;width:14px;height:14px;stroke:#10b981;fill:none;stroke-width:2}
-    
-    /* Dashboard Table */
-    .dashboard-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:visible;backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,0.4)}
-    .dash-toolbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.4)}
-    .dash-title{font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px}
-    .table-container{width:100%;overflow:visible}
-    .custom-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left;min-width:900px}
-    .custom-table th{background:rgba(0,0,0,0.3);padding:14px 20px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
-    .custom-table td{padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:middle;color:var(--text)}
-    .custom-table tr:hover td{background:rgba(244, 63, 94, 0.15)}
-    
-    .td-thumb img, .td-thumb .no-thumb {
-      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
-      position: relative;
-      z-index: 1;
-      transform-origin: center left;
-    }
-    .td-thumb img:hover, .td-thumb .no-thumb:hover {
-      transform: scale(3.5);
-      z-index: 100;
-      box-shadow: 0 15px 30px rgba(0,0,0,0.9);
-    }
-    .td-thumb img{width:100px;height:60px;border-radius:6px;object-fit:cover;background:#1a1a1a;display:block;border:1px solid rgba(255,255,255,0.1)}
-    .td-thumb .no-thumb{width:100px;height:60px;border-radius:6px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);border:1px solid rgba(255,255,255,0.1)}
-    
-    .action-play{color:#f97316;display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:600;font-size:13px;cursor:pointer;background:none;border:none;transition:color .2s}
-    .action-play:hover{color:#fdba74}
-    
-    .link-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;letter-spacing:0.5px;transition:all 0.2s;width:100%;text-align:center;border:1px solid transparent}
-    .link-btn-1{background:rgba(96,165,250,0.1);color:#60a5fa;border-color:rgba(96,165,250,0.2)}
-    .link-btn-1:hover{background:rgba(96,165,250,0.2);transform:translateY(-1px)}
-    .link-btn-2{background:rgba(192,132,252,0.1);color:#c084fc;border-color:rgba(192,132,252,0.2)}
-    .link-btn-2:hover{background:rgba(192,132,252,0.2);transform:translateY(-1px)}
-    
-    .status-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%}
-    .status-icon.success{background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)}
-    .status-icon.error{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
-    .status-icon.pending{background:rgba(234,179,8,0.15);color:#eab308;animation:pulse 2s infinite;border:1px solid rgba(234,179,8,0.3)}
-    
-    .table-url{color:#f97316;text-decoration:none;display:inline-flex;align-items:center;gap:4px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
-    .table-url:hover{text-decoration:underline}
-    
-    .timer-badge{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted)}
-    .timer-expired{color:#fca5a5}
-    
-    /* Modals */
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(10px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
-    .modal-overlay.open{display:flex}
-    .modal{background:linear-gradient(135deg,#0f1629,#1a0a2e);border:1px solid rgba(99,102,241,0.3);border-radius:20px;padding:36px;max-width:440px;width:100%;text-align:center;box-shadow:0 40px 80px rgba(0,0,0,0.7)}
-    .modal h2{font-size:22px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#f9a8d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
-    .modal p{color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.6}
-    .modal-cta{width:100%;padding:14px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s;margin-bottom:10px}
-    .modal-cta:hover{transform:translateY(-2px)}
-    .modal-close{font-size:12px;color:var(--muted);cursor:pointer;background:none;border:none}
-    
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse{0%{opacity:1}50%{opacity:0.5}100%{opacity:1}}
-  </style> }
-  </style>
+  
+  <!-- Centralized Design System Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body>
 
 <div class="header">
-  <div class="logo">
+  <a href="/" class="logo">
     <div class="logo-icon">
       <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
     </div>
     <span class="logo-text">Ekkoscope</span>
-  </div>
-  <div class="auth-box" id="auth-box">
-    <!-- Populated by JS -->
+  </a>
+  <div class="header-actions">
+    <button class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle theme">
+      <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <div class="auth-box" id="auth-box">
+      <!-- Populated by JS -->
+    </div>
   </div>
 </div>
 
@@ -229,6 +131,24 @@
   </div>
 </div>
 
+<!-- Coins Modal -->
+<div class="modal-overlay" id="coins-modal">
+  <div class="modal" style="max-width:380px;padding:32px 24px">
+    <div style="font-size:48px;margin-bottom:16px">🪙</div>
+    <h2>Ekko Coins</h2>
+    <p>Top up your Ekko Coin balance to unlock video downloads.</p>
+    
+    <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:16px;margin:18px 0;text-align:center;">
+      <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Your Current Balance</div>
+      <div style="font-size:36px;font-weight:800;color:var(--yellow-text);margin-top:4px;" id="coins-modal-balance">0</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">1 Download = 1 Ekko Coin</div>
+    </div>
+    
+    <button class="modal-cta" style="background:linear-gradient(135deg,#f59e0b,#d97706);box-shadow:0 4px 15px rgba(245,158,11,0.3)" onclick="buyCoinsCrypto()">🪙 Top Up Coins (Crypto)</button>
+    <button class="modal-close" onclick="document.getElementById('coins-modal').classList.remove('open')" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
 <!-- Auth Modal -->
 <div class="modal-overlay" id="auth-modal">
   <div class="modal" style="max-width:380px;padding:32px 24px">
@@ -304,10 +224,16 @@ function renderAuthBox() {
   const box = document.getElementById('auth-box');
   if (token() && email) {
     box.innerHTML = `
+      <div class="coin-badge" id="coin-badge-display" onclick="openCoinsModal()">
+        <span class="coin-icon">🪙</span>
+        <span class="coin-amount" id="coin-amount-val">...</span>
+        <span class="coin-name">Coins</span>
+      </div>
       <span class="auth-email">${email}</span>
       <button class="btn btn-ghost btn-sm" onclick="logout()">Log out</button>
     `;
     loadHistory();
+    fetchUserMe();
   } else {
     box.innerHTML = `
       <button class="btn btn-ghost btn-sm" onclick="openAuthModal('login')">Log In</button>
@@ -315,6 +241,43 @@ function renderAuthBox() {
     `;
     document.getElementById('dash-tbody').innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Log in to view your downloads.</td></tr>`;
   }
+}
+
+async function fetchUserMe() {
+  if (!token()) return;
+  try {
+    const res = await fetch('/api/user/me', {
+      headers: { 'Authorization': `Bearer ${token()}` }
+    });
+    if (res.status === 401 || res.status === 403) return logout();
+    const data = await res.json();
+    const coinAmountVal = document.getElementById('coin-amount-val');
+    if (coinAmountVal) {
+      coinAmountVal.textContent = data.coins;
+    }
+  } catch (err) {
+    console.error('[User Me fetch failed]', err);
+  }
+}
+
+function openCoinsModal() {
+  const email = localStorage.getItem('ekko_email');
+  if (!token() || !email) return openAuthModal('login');
+  
+  // Sync the balance first
+  fetchUserMe().then(() => {
+    const coinValElement = document.getElementById('coin-amount-val');
+    const modalBalanceElement = document.getElementById('coins-modal-balance');
+    if (coinValElement && modalBalanceElement) {
+      modalBalanceElement.textContent = coinValElement.textContent;
+    }
+  });
+  
+  document.getElementById('coins-modal').classList.add('open');
+}
+
+function buyCoinsCrypto() {
+  alert("Crypto API Integration is coming soon!\n\nFor now, please contact our support team or admin to add Ekko Coins to your account.");
 }
 
 // History & Queue Rendering
@@ -603,6 +566,11 @@ async function startJob(clipMode, bypassCode) {
     });
     const data = await res.json();
   
+    if (data.error === 'insufficient_coins') {
+      setBtnsDisabled(false);
+      openCoinsModal();
+      return;
+    }
     if (res.status === 402 || data.error === 'paywall') {
       setBtnsDisabled(false);
       pendingRequest = { clipMode };
@@ -613,6 +581,12 @@ async function startJob(clipMode, bypassCode) {
       alert(data.error || 'Server error');
       setBtnsDisabled(false);
       return;
+    }
+    
+    // Deduct a coin locally immediately to feel fast, then sync
+    const coinAmountVal = document.getElementById('coin-amount-val');
+    if (coinAmountVal && !isNaN(parseInt(coinAmountVal.textContent, 10))) {
+      coinAmountVal.textContent = Math.max(0, parseInt(coinAmountVal.textContent, 10) - 1);
     }
   
     // Setup active job in UI
@@ -750,6 +724,35 @@ setInterval(async () => {
     }
   } catch(e) {}
 }, 15000);
+
+// Theme Toggle Event Listener
+document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('ekko_theme', newTheme);
+});
+
+// Queue Heartbeat system
+async function sendQueueHeartbeat() {
+  try {
+    await fetch('/api/queue/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    console.warn('[Queue Heartbeat Failed]', err);
+  }
+}
+// Heartbeat every 10 seconds
+setInterval(sendQueueHeartbeat, 10000);
+sendQueueHeartbeat(); // initial call
+
+// Check URL params on load
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('trigger_auth')) {
+  openAuthModal('register');
+}
 
 renderAuthBox();
 </script>

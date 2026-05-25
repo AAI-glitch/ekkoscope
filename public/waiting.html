@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Ekkoscope — Waiting Queue</title>
+  
+  <script>
+    /* Prevent Light/Dark Mode Flicker */
+    (function() {
+      const theme = localStorage.getItem('ekko_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <!-- Centralized Design System Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css"/>
+
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+    }
+    
+    .waiting-card {
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      padding: 48px 36px;
+    }
+    
+    .queue-icon-wrapper {
+      position: relative;
+      width: 90px;
+      height: 90px;
+      margin: 0 auto 28px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(244, 63, 94, 0.15));
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 50%;
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.1);
+    }
+    
+    .queue-icon {
+      font-size: 36px;
+      animation: pulse-gear 2.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse-gear {
+      0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+      50% { transform: scale(1.15) rotate(180deg); opacity: 1; filter: drop-shadow(0 0 15px rgba(244, 63, 94, 0.5)); }
+    }
+    
+    .waiting-title {
+      font-family: var(--font-heading);
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      background: var(--brand-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    
+    .queue-msg {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 32px;
+      padding: 14px 18px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    html[data-theme="light"] .queue-msg {
+      background: rgba(255, 255, 255, 0.6);
+    }
+    
+    .vip-button {
+      width: 100%;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #ffffff;
+      padding: 16px 20px;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 800;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.35);
+      transition: var(--transition-spring);
+      margin-bottom: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    
+    .vip-button:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 10px 28px rgba(245, 158, 11, 0.5);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .vip-button:active {
+      transform: translateY(1px);
+    }
+    
+    .status-badge {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--yellow);
+      border-radius: 50%;
+      animation: pulse-dot-anim 1.5s infinite;
+    }
+    
+    @keyframes pulse-dot-anim {
+      0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+      70% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+      100% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="waiting-card card">
+    <div class="queue-icon-wrapper">
+      <div class="queue-icon">⏳</div>
+    </div>
+    
+    <h1 class="waiting-title">Heavy Traffic Detected</h1>
+    
+    <div class="queue-msg">
+      {{MESSAGE}}
+    </div>
+    
+    <button class="vip-button" onclick="activateVipBypass()">
+      ⭐ VIP Access (Bypass Wait)
+    </button>
+    
+    <div class="status-badge">
+      <div class="pulse-dot"></div>
+      <span>Checking slots periodically...</span>
+    </div>
+  </div>
+
+<script>
+  function activateVipBypass() {
+    // Set the VIP bypass cookie (valid for 1 year)
+    document.cookie = "vip_bypass=1; path=/; max-age=31536000; SameSite=Lax";
+    // Redirect to index page with auth modal trigger query param
+    window.location.href = "/?trigger_auth=1";
+  }
+
+  // Poll server to check if slots open up
+  async function checkQueueStatus() {
+    try {
+      const res = await fetch('/api/queue/status');
+      if (res.ok) {
+        const data = await res.json();
+        // If queue is no longer full, reload to enter the site
+        if (!data.full) {
+          window.location.reload();
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to check queue status:', e);
+    }
+  }
+
+  // Poll every 5 seconds
+  setInterval(checkQueueStatus, 5000);
+</script>
+</body>
+</html>

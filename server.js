@@ -9,6 +9,121 @@ const { sendEmail } = require('./mailer');
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+
+// Maintenance Mode Middleware (MUST run before express.static to intercept static routes like '/' when active)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/admin') ||
+      req.path.startsWith('/api/auth') ||
+      req.path === '/admin.html' ||
+      req.path === '/maintenance.html' ||
+      req.path === '/api/maintenance-status' ||
+      req.path.startsWith('/css/') ||
+      req.path.startsWith('/js/')
+  ) {
+    return next();
+  }
+
+  try {
+    const db = require('./db');
+    const maintenanceSetting = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_mode'").get();
+    const isMaintenance = maintenanceSetting && maintenanceSetting.value === '1';
+
+    if (isMaintenance) {
+      const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_msg'").get();
+      const maintenanceMsg = msgSetting?.value || "We are currently conducting scheduled maintenance. Please check back shortly!";
+
+      if (req.path.startsWith('/api/')) {
+        return res.status(503).json({
+          error: 'maintenance',
+          message: maintenanceMsg
+        });
+      }
+
+      return res.sendFile(path.join(__dirname, 'public', 'maintenance.html'));
+    }
+  } catch (err) {
+    console.error('[Maintenance Middleware Error]', err);
+  }
+  next();
+});
+
+// Redirect /index.html to / to keep queue checking consistent
+app.get('/index.html', (req, res) => {
+  res.redirect('/');
+});
+
+// Queue Interceptor for root '/'
+app.get('/', (req, res, next) => {
+  // Extract or set unique guest/user session ID
+  let sessionId = req.headers.cookie?.match(/ekko_session_id=([^;]+)/)?.[1];
+  if (!sessionId) {
+    sessionId = uuidv4();
+    res.setHeader('Set-Cookie', `ekko_session_id=${sessionId}; Path=/; Max-Age=86400; SameSite=Lax`);
+  }
+
+  // Clean up expired sessions (older than 20 seconds)
+  const now = Date.now();
+  for (const [sid, sess] of activeSessions.entries()) {
+    if (now - sess.lastSeen > 20000) {
+      activeSessions.delete(sid);
+    }
+  }
+
+  // Check VIP bypass cookie
+  const cookies = req.headers.cookie || '';
+  const isVipBypass = cookies.includes('vip_bypass=1');
+
+  // Fetch concurrent users settings
+  const db = require('./db');
+  let maxConcurrent = 9999;
+  let queueMsg = "The site is currently full. Please wait or use VIP access.";
+  let forceQueue = false;
+  try {
+    const setting = db.prepare("SELECT value FROM settings WHERE key = 'max_concurrent_users'").get();
+    if (setting && setting.value !== undefined && setting.value !== '') {
+      maxConcurrent = parseInt(setting.value, 10);
+    }
+    const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'queue_message'").get();
+    if (msgSetting && msgSetting.value) {
+      queueMsg = msgSetting.value;
+    }
+    const forceSetting = db.prepare("SELECT value FROM settings WHERE key = 'force_queue'").get();
+    if (forceSetting && forceSetting.value === '1') {
+      forceQueue = true;
+    }
+  } catch (err) {
+    console.error('[Queue Config Fetch Error]', err);
+  }
+
+  // Check if this session is already registered as active
+  const isSessionActive = activeSessions.has(sessionId);
+
+  // Count active non-VIP sessions, excluding the current session if it's already active
+  const activeNonVips = Array.from(activeSessions.entries())
+    .filter(([sid, s]) => !s.isVip && sid !== sessionId);
+
+  // If the site is full, they are not bypassed, and their session is not already active
+  if (!isVipBypass && (forceQueue || (activeNonVips.length >= maxConcurrent && !isSessionActive))) {
+    try {
+      let waitingHtml = fs.readFileSync(path.join(__dirname, 'public', 'waiting.html'), 'utf8');
+      waitingHtml = waitingHtml.replace('{{MESSAGE}}', queueMsg);
+      return res.send(waitingHtml);
+    } catch (err) {
+      console.error('Failed to read waiting.html, falling back to basic UI', err);
+      return res.send(`<h1>Waiting Queue</h1><p>${queueMsg}</p><button onclick="document.cookie='vip_bypass=1;path=/';window.location.reload()">VIP Bypass</button>`);
+    }
+  }
+
+  // Register or renew active session
+  activeSessions.set(sessionId, {
+    lastSeen: now,
+    ip: getIP(req),
+    isVip: isVipBypass
+  });
+
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Authentication
@@ -20,6 +135,7 @@ app.use('/api/auth', authRouter);
 const jobs = new Map();
 const uploadJobs = new Map(); // Track upload progress
 const ipUsage = new Map();
+const activeSessions = new Map(); // sessionId -> { lastSeen: timestamp, ip: string, isVip: boolean }
 
 const adminConfig = {
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123'
@@ -120,6 +236,19 @@ sessionMgr.on('status', (s) => console.log('[Session] Status:', s));
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+app.get('/api/maintenance-status', (req, res) => {
+  try {
+    const db = require('./db');
+    const modeSetting = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_mode'").get();
+    const isMaintenance = modeSetting && modeSetting.value === '1';
+    const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'maintenance_msg'").get();
+    const maintenanceMsg = msgSetting?.value || "We are currently conducting scheduled maintenance. Please check back shortly!";
+    res.json({ maintenance: isMaintenance, message: maintenanceMsg });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/free-tier', (req, res) => {
   const usage = ipUsage.get(getIP(req)) || { fullCount: 0, clipCount: 0 };
   
@@ -150,21 +279,40 @@ app.post('/api/start', optionalAuthenticate, async (req, res) => {
   const usage = ipUsage.get(ip) || { fullCount: 0, clipCount: 0 };
   const bypassed = bypassCode === BYPASS_CODE;
 
-  if (!bypassed) {
-    if (clipMode) {
-      if (clipDuration > FREE_CLIP_MAX_SECS)
-        return res.status(402).json({ error: 'paywall', message: `Free clips limited to ${FREE_CLIP_MAX_SECS / 60} min.` });
-      if (usage.clipCount >= FREE_CLIP_LIMIT)
-        return res.status(402).json({ error: 'paywall', message: 'Free clip tier exhausted.' });
-    } else {
-      if (usage.fullCount >= FREE_FULL_LIMIT)
-        return res.status(402).json({ error: 'paywall', message: 'Free download tier exhausted.' });
+  if (req.user) {
+    // Authenticated users must use Ekko Coins if not using bypass code
+    if (!bypassed) {
+      const db = require('./db');
+      const user = db.prepare('SELECT coins FROM users WHERE id = ?').get(req.user.id);
+      if (!user || user.coins < 1) {
+        return res.status(402).json({
+          error: 'insufficient_coins',
+          message: 'Insufficient Ekko Coins. You need 1 Ekko Coin to start a download.'
+        });
+      }
+      
+      // Deduct 1 Ekko Coin
+      db.prepare('UPDATE users SET coins = coins - 1 WHERE id = ?').run(req.user.id);
+      console.log(`[Server] Deducted 1 Ekko Coin from user ${req.user.id} (${req.user.email}).`);
     }
-  }
+  } else {
+    // Guest users check IP usage
+    if (!bypassed) {
+      if (clipMode) {
+        if (clipDuration > FREE_CLIP_MAX_SECS)
+          return res.status(402).json({ error: 'paywall', message: `Free clips limited to ${FREE_CLIP_MAX_SECS / 60} min.` });
+        if (usage.clipCount >= FREE_CLIP_LIMIT)
+          return res.status(402).json({ error: 'paywall', message: 'Free clip tier exhausted.' });
+      } else {
+        if (usage.fullCount >= FREE_FULL_LIMIT)
+          return res.status(402).json({ error: 'paywall', message: 'Free download tier exhausted.' });
+      }
+    }
 
-  if (!bypassed) {
-    if (clipMode) usage.clipCount++; else usage.fullCount++;
-    ipUsage.set(ip, usage);
+    if (!bypassed) {
+      if (clipMode) usage.clipCount++; else usage.fullCount++;
+      ipUsage.set(ip, usage);
+    }
   }
 
   const jobId = uuidv4();
@@ -524,6 +672,103 @@ app.get('/api/history', authenticateUser, (req, res) => {
   }
 });
 
+// Heartbeat endpoint
+app.post('/api/queue/heartbeat', (req, res) => {
+  let sessionId = req.headers.cookie?.match(/ekko_session_id=([^;]+)/)?.[1];
+  if (!sessionId) {
+    sessionId = uuidv4();
+    res.setHeader('Set-Cookie', `ekko_session_id=${sessionId}; Path=/; Max-Age=86400; SameSite=Lax`);
+  }
+
+  const cookies = req.headers.cookie || '';
+  const isVipBypass = cookies.includes('vip_bypass=1');
+
+  activeSessions.set(sessionId, {
+    lastSeen: Date.now(),
+    ip: getIP(req),
+    isVip: isVipBypass
+  });
+
+  res.json({ success: true });
+});
+
+// Queue status endpoint (for waiting screen polling)
+app.get('/api/queue/status', (req, res) => {
+  let sessionId = req.headers.cookie?.match(/ekko_session_id=([^;]+)/)?.[1];
+
+  // Clean up
+  const now = Date.now();
+  for (const [sid, sess] of activeSessions.entries()) {
+    if (now - sess.lastSeen > 20000) {
+      activeSessions.delete(sid);
+    }
+  }
+
+  const db = require('./db');
+  let maxConcurrent = 9999;
+  let queueMsg = "The site is currently full. Please wait or use VIP access.";
+  let forceQueue = false;
+  try {
+    const setting = db.prepare("SELECT value FROM settings WHERE key = 'max_concurrent_users'").get();
+    if (setting && setting.value !== undefined && setting.value !== '') maxConcurrent = parseInt(setting.value, 10);
+    const msgSetting = db.prepare("SELECT value FROM settings WHERE key = 'queue_message'").get();
+    if (msgSetting && msgSetting.value) queueMsg = msgSetting.value;
+    const forceSetting = db.prepare("SELECT value FROM settings WHERE key = 'force_queue'").get();
+    if (forceSetting && forceSetting.value === '1') forceQueue = true;
+  } catch (err) {}
+
+  const activeNonVips = Array.from(activeSessions.entries())
+    .filter(([sid, s]) => !s.isVip && sid !== sessionId);
+
+  const full = forceQueue || (activeNonVips.length >= maxConcurrent);
+
+  res.json({
+    full: full,
+    message: queueMsg,
+    activeCount: activeNonVips.length,
+    maxConcurrent: maxConcurrent
+  });
+});
+
+// Get authenticated user info
+app.get('/api/user/me', authenticateUser, (req, res) => {
+  try {
+    const db = require('./db');
+    const user = db.prepare('SELECT email, coins FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ email: user.email, coins: user.coins || 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin get all users
+app.get('/api/admin/users', (req, res) => {
+  if (req.query.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const db = require('./db');
+    const users = db.prepare('SELECT id, email, coins, created_at FROM users ORDER BY created_at DESC').all();
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin credit coins to a user
+app.post('/api/admin/users/add-coins', (req, res) => {
+  if (req.body.token !== adminToken()) return res.status(401).json({ error: 'Unauthorized' });
+  const { userId, amount } = req.body;
+  if (!userId || amount === undefined) return res.status(400).json({ error: 'Missing parameters' });
+  
+  try {
+    const db = require('./db');
+    const parsedAmount = parseInt(amount, 10);
+    db.prepare('UPDATE users SET coins = coins + ? WHERE id = ?').run(parsedAmount, userId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 app.post('/api/admin/login', (req, res) => {
@@ -590,7 +835,12 @@ app.get('/api/admin/settings', (req, res) => {
     gif_duration: getSetting('gif_duration') || '3',
     seek_interval: getSetting('seek_interval') || '500',
     buffer_margin: getSetting('buffer_margin') || '8',
-    seek_offset: getSetting('seek_offset') || '2'
+    seek_offset: getSetting('seek_offset') || '2',
+    maintenance_mode: getSetting('maintenance_mode') || '0',
+    maintenance_msg: getSetting('maintenance_msg') || 'We are currently conducting scheduled maintenance. Please check back shortly!',
+    max_concurrent_users: getSetting('max_concurrent_users') || '5',
+    queue_message: getSetting('queue_message') || 'The site is currently full. Please wait or use VIP access.',
+    force_queue: getSetting('force_queue') || '0'
   });
 });
 
@@ -614,6 +864,11 @@ app.post('/api/admin/settings', (req, res) => {
   update('seek_interval', req.body.seek_interval);
   update('buffer_margin', req.body.buffer_margin);
   update('seek_offset', req.body.seek_offset);
+  update('maintenance_mode', req.body.maintenance_mode);
+  update('maintenance_msg', req.body.maintenance_msg);
+  update('max_concurrent_users', req.body.max_concurrent_users);
+  update('queue_message', req.body.queue_message);
+  update('force_queue', req.body.force_queue);
   
   res.json({ success: true });
 });

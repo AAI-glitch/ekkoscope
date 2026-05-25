@@ -4,101 +4,130 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Ekkoscope — Admin Panel</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  
+  <script>
+    /* Prevent Light/Dark Mode Flicker */
+    (function() {
+      const theme = localStorage.getItem('ekko_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <!-- Centralized Design System Stylesheet -->
+  <link rel="stylesheet" href="/css/style.css"/>
   <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#040712;--surface:rgba(15,20,40,0.85);--border:rgba(99,102,241,0.2);--accent:#6366f1;--green:#10b981;--red:#f43f5e;--text:#e2e8f0;--muted:#64748b}
-    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-    body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 50% at 30% 30%,rgba(99,102,241,0.1) 0%,transparent 60%);pointer-events:none}
-
-    .container{position:relative;z-index:1;width:100%;max-width:1400px}
-    #login-screen{max-width:500px;margin:0 auto;}
-
-    .logo{display:flex;align-items:center;gap:12px;margin-bottom:32px;justify-content:center}
-    .logo-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center}
-    .logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-    .logo-text{font-size:20px;font-weight:800;background:linear-gradient(135deg,#a5b4fc,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .logo-badge{font-size:10px;background:rgba(99,102,241,0.3);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;padding:2px 8px;border-radius:20px;font-weight:700;letter-spacing:1px}
-
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;backdrop-filter:blur(20px);box-shadow:0 20px 50px rgba(0,0,0,0.5);margin-bottom:16px;transition:transform 0.3s ease, box-shadow 0.3s ease;height:100%;display:flex;flex-direction:column}
-    .card:hover{transform:translateY(-4px);box-shadow:0 30px 60px rgba(99,102,241,0.2);}
-    .card-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-    .card-title::after{content:'';flex:1;height:1px;background:var(--border)}
-
-    /* Login screen */
-    .field-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:block}
-    .text-input{width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:10px;font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s;margin-bottom:14px}
-    .text-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,0.15)}
-    .btn{width:100%;padding:13px;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:0.5px}
-    .btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 20px rgba(79,70,229,0.4)}
-    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 25px rgba(79,70,229,0.5)}
-    .btn-danger{background:linear-gradient(135deg,#be123c,#f43f5e);color:#fff;box-shadow:0 4px 20px rgba(244,63,94,0.3)}
-    .btn-sm{padding:7px 14px;font-size:12px;width:auto}
-    .error-msg{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
-
-    /* Admin panel */
-    #admin-panel{display:none}
-    #admin-panel.open{display:grid;grid-template-columns:repeat(auto-fit, minmax(400px, 1fr));gap:24px;align-items:start;}
-    .admin-grid-full{grid-column: 1 / -1;}
-    .creds-row{display:flex;gap:10px}
-    .creds-row .text-input{margin-bottom:0}
-    .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:0}
-    .stat-card{background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
-    .stat-num{font-size:28px;font-weight:800;color:#a5b4fc;font-family:'JetBrains Mono',monospace}
-    .stat-lbl{font-size:11px;color:var(--muted);margin-top:4px}
+    /* Full-screen wide container */
+    .table-wrap {
+      max-width: 100% !important;
+      padding: 0 40px !important;
+      margin: 0 auto 60px auto !important;
+    }
     
-    .table-container{overflow-x:auto;width:100%}
-    .custom-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left;}
-    .custom-table th{background:rgba(0,0,0,0.3);padding:12px 16px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
-    .custom-table td{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.03);vertical-align:middle;color:var(--text);font-family:'JetBrains Mono',monospace;word-break:break-all}
-    .custom-table tr:hover td{background:rgba(255,255,255,0.02)}
+    .header {
+      max-width: 100% !important;
+      padding: 24px 40px !important;
+      background: rgba(3, 5, 12, 0.4);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
     
-    .pill{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;display:inline-block;letter-spacing:0.5px}
-    .pill-blue{background:rgba(99,102,241,0.2);color:#a5b4fc}
-    .pill-green{background:rgba(16,185,129,0.2);color:#6ee7b7}
-    .pill-red{background:rgba(239,68,68,0.2);color:#fca5a5}
-    .pill-yellow{background:rgba(234,179,8,0.2);color:#fde047}
-    .bypass-badge{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--green);letter-spacing:0.5px}
-    .refresh-btn{font-size:11px;color:var(--muted);cursor:pointer;background:none;border:none;margin-left:auto;display:flex}
-    .refresh-btn:hover{color:var(--text)}
-    .nav-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin-top:16px;text-decoration:none;transition:color .2s}
-    .nav-link:hover{color:var(--text)}
+    #admin-panel.open {
+      display: grid !important;
+      grid-template-columns: repeat(12, 1fr) !important;
+      gap: 32px !important;
+    }
+    
+    .card {
+      height: 100%;
+      margin: 0 !important;
+      padding: 28px !important;
+    }
+    
+    /* Responsive Grid Columns assignment for custom layouts */
+    .col-12 { grid-column: span 12 !important; }
+    .col-8  { grid-column: span 8 !important; }
+    .col-4  { grid-column: span 4 !important; }
+    
+    @media (max-width: 1100px) {
+      .col-8, .col-4 {
+        grid-column: span 12 !important;
+      }
+    }
+    
+    .custom-table th {
+      padding: 12px 16px !important;
+      font-size: 11px !important;
+    }
+    
+    .custom-table td {
+      padding: 12px 16px !important;
+      font-size: 13px !important;
+    }
+    
+    .stat-grid {
+      grid-template-columns: repeat(5, 1fr) !important;
+      gap: 20px !important;
+    }
+    
+    @media (max-width: 1024px) {
+      .stat-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+      }
+    }
+    
+    @media (max-width: 640px) {
+      .stat-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+    }
   </style>
 </head>
 <body>
-<div class="container">
-  <div class="logo">
+
+<div class="header">
+  <a href="/" class="logo">
     <div class="logo-icon">
       <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
     </div>
     <span class="logo-text">Ekkoscope</span>
     <span class="logo-badge">ADMIN</span>
+  </a>
+  <div class="header-actions">
+    <button class="theme-toggle-btn" id="theme-toggle-btn" aria-label="Toggle theme">
+      <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
   </div>
+</div>
 
-  <!-- Login -->
-  <div id="login-screen">
-    <div class="card">
-      <div class="card-title">Admin Login</div>
-      <div id="login-error" class="error-msg"></div>
-      <label class="field-label">Admin Password</label>
-      <input id="admin-pass" class="text-input" type="password" placeholder="Enter admin password"/>
-      <button class="btn btn-primary" onclick="doLogin()">🔐 Login</button>
-    </div>
+<!-- Login -->
+<div class="main-wrap" id="login-screen">
+  <div class="card">
+    <div class="card-title">Admin Login</div>
+    <div id="login-error" class="error-msg"></div>
+    <label class="field-label">Admin Password</label>
+    <input id="admin-pass" class="text-input" type="password" placeholder="Enter admin password"/>
+    <button class="btn btn-primary" onclick="doLogin()">🔐 Login</button>
   </div>
+</div>
 
-  <!-- Admin panel -->
+<!-- Admin panel -->
+<div class="table-wrap">
   <div id="admin-panel">
-    <!-- Stats -->
-    <div class="card">
-      <div class="card-title">
-        Overview
-        <button class="refresh-btn" onclick="loadStatus()">↻ Refresh</button>
+    <!-- Dashboard Global Stats (col-12) -->
+    <div class="card col-12">
+      <div class="card-title" style="margin-bottom: 18px; display:flex; align-items:center; justify-content:space-between;">
+        <span>🚀 Ekkoscope Admin Dashboard Overview</span>
+        <button class="refresh-btn" onclick="loadStatus()">↻ Refresh Overview</button>
       </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-num" id="stat-jobs">-</div><div class="stat-lbl">Active Jobs</div></div>
         <div class="stat-card"><div class="stat-num" id="stat-users">-</div><div class="stat-lbl">Unique IPs</div></div>
-        <div class="stat-card" id="session-stat-card"><div class="stat-num" id="stat-session" style="font-size:18px">-</div><div class="stat-lbl">Session</div></div>
+        <div class="stat-card" id="session-stat-card"><div class="stat-num" id="stat-session" style="font-size:18px">-</div><div class="stat-lbl">Cookie Session</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-total-users">-</div><div class="stat-lbl">Total Registered Users</div></div>
+        <div class="stat-card"><div class="stat-num" id="stat-total-downloads">-</div><div class="stat-lbl">Total Video Downloads</div></div>
       </div>
       <div id="session-detail" style="font-size:12px;color:var(--muted);margin-top:14px;background:rgba(0,0,0,0.2);border-radius:8px;padding:12px;line-height:1.9;display:none">
         <span id="session-age"></span><br>
@@ -111,155 +140,219 @@
       <div id="refresh-msg" style="font-size:12px;margin-top:8px;display:none"></div>
     </div>
 
-    <!-- Analytics Section -->
-    <div class="card admin-grid-full">
-      <div class="card-title">Analytics</div>
-      <div class="stat-grid" style="margin-bottom: 20px; grid-template-columns:repeat(2,1fr);">
-        <div class="stat-card"><div class="stat-num" id="stat-total-users">-</div><div class="stat-lbl">Total Users</div></div>
-        <div class="stat-card"><div class="stat-num" id="stat-total-downloads">-</div><div class="stat-lbl">Total Downloads</div></div>
-      </div>
+    <!-- LEFT COLUMN (col-8) — Main Management Console -->
+    <div class="col-8" style="display:flex; flex-direction:column; gap:32px;">
       
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:24px;">
-        <div class="table-container">
-          <div class="card-title" style="font-size:10px;">Downloads By User</div>
-          <table class="custom-table" id="table-by-user">
-            <thead><tr><th>User</th><th>Downloads</th></tr></thead>
+      <!-- Users & Coins Management -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Registered Users &amp; Ekko Coins <span style="color:#f59e0b;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Admin coins distribution</span></div>
+        <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#fde047;line-height:1.7">
+          🪙 View all registered users and credit Ekko Coins directly to their accounts. Value can be positive or negative.
+        </div>
+        <div class="table-container" style="overflow:visible">
+          <table class="custom-table" id="table-users">
+            <thead>
+              <tr>
+                <th>Join Date</th>
+                <th>User ID</th>
+                <th>Email</th>
+                <th>Coins Balance</th>
+                <th>Credit Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Loading registered users...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Active jobs -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Active Download Jobs <span style="color:#60a5fa;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Currently processing</span></div>
+        <div id="jobs-table-wrap" class="table-container">
+          <p style="color:var(--muted);font-size:13px">No active jobs.</p>
+        </div>
+      </div>
+
+      <!-- Backlog -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Failed Backlog <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-retrying jobs</span></div>
+        <div class="table-container" style="overflow:visible">
+          <table class="custom-table" id="table-backlog">
+            <thead><tr><th>Date</th><th>User Email</th><th>Video URL</th><th>Status</th><th>Action</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <div class="table-container">
-          <div class="card-title" style="font-size:10px;">Downloads By Day</div>
-          <table class="custom-table" id="table-by-day">
-            <thead><tr><th>Date</th><th>Downloads</th></tr></thead>
-            <tbody></tbody>
-          </table>
+      </div>
+
+      <!-- Analytics Section -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Downloads Analytics Summary</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:24px;">
+          <div class="table-container">
+            <div class="card-title" style="font-size:10px;">Downloads By User</div>
+            <table class="custom-table" id="table-by-user" style="min-width: 100%;">
+              <thead><tr><th>User</th><th>Downloads</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="table-container">
+            <div class="card-title" style="font-size:10px;">Downloads By Day</div>
+            <table class="custom-table" id="table-by-day" style="min-width: 100%;">
+              <thead><tr><th>Date</th><th>Downloads</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </div>
+
     </div>
 
-    <!-- Admin Account Credentials -->
-    <div class="card">
-      <div class="card-title">Admin Account <span style="color:#10b981;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— premium recu.me login</span></div>
-      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#6ee7b7;line-height:1.7">
-        🔑 The server will automatically log in with these credentials for every download request.
+    <!-- RIGHT COLUMN (col-4) — System Configuration Console -->
+    <div class="col-4" style="display:flex; flex-direction:column; gap:32px;">
+
+      <!-- Bypass code -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Bypass Code</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Share this code with paying users to bypass the paywall (set in your .env file).</p>
+        <div class="bypass-badge" id="bypass-code-display">Loading...</div>
       </div>
-      <label class="field-label">recu.me Email</label>
-      <input id="cred-email" class="text-input" type="email" placeholder="your@email.com"/>
-      <label class="field-label">recu.me Password</label>
-      <input id="cred-pass" class="text-input" type="password" placeholder="Your recu.me password"/>
-      <button class="btn btn-primary" onclick="saveCreds()">💾 Save Credentials</button>
-      <div id="cred-status" style="font-size:12px;margin-top:10px;display:none"></div>
-    </div>
 
-    <!-- DoodAPI Configuration -->
-    <div class="card">
-      <div class="card-title">Upload API Configuration <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Cloud Hosts</span></div>
-      <label class="field-label">DoodAPI Key</label>
-      <input id="upload-api-key" class="text-input" type="text" placeholder="Enter DoodAPI Key"/>
-      
-      <label class="field-label" style="margin-top:10px">KrakenFiles API Key</label>
-      <input id="upload-api-key-2" class="text-input" type="text" placeholder="Enter KrakenFiles API Key"/>
-      
-      <button class="btn btn-primary" onclick="saveApiKey()" style="margin-top:10px">💾 Save API Keys</button>
-      <div id="api-key-status" style="font-size:12px;margin-top:10px;display:none"></div>
-    </div>
-
-    <!-- Performance Tuning -->
-    <div class="card">
-      <div class="card-title">Performance Tuning <span style="color:#f97316;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Download Speed</span></div>
-      <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.15);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#fdba74;line-height:1.7">
-        ⚠️ Warning: Making the downloader too aggressive can crash the video player. Default values: Interval=500, Buffer=8, Backtrack=2.
-      </div>
-      <div style="display:flex;gap:10px;margin-bottom:0">
-        <div style="flex:1">
-          <label class="field-label">Polling Interval (ms)</label>
-          <input id="setting-seek-interval" class="text-input" type="number" placeholder="500"/>
+      <!-- Queue and Waiting Screen Settings -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Queue &amp; Waiting Settings <span style="color:#f59e0b;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Connection Limits</span></div>
+        
+        <div style="display:flex; align-items:center; gap:10px; margin-top:8px; margin-bottom:16px;">
+          <input type="checkbox" id="setting-force-queue" style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer; margin-bottom:0;"/>
+          <label for="setting-force-queue" style="color:var(--text); font-size:13px; cursor:pointer; font-weight:600; line-height:1.2;">🚨 Force Queue Page (Always redirect non-VIP users to waiting screen)</label>
         </div>
-        <div style="flex:1">
-          <label class="field-label">Buffer Jump Threshold (s)</label>
-          <input id="setting-buffer-margin" class="text-input" type="number" placeholder="8"/>
+
+        <label class="field-label">Max Concurrent Connected Users</label>
+        <input id="setting-max-users" class="text-input" type="number" placeholder="5" style="margin-bottom:16px;"/>
+        
+        <label class="field-label">Queue Waiting Screen Message</label>
+        <textarea id="setting-queue-msg" class="text-input" rows="2" placeholder="The site is currently full. Please wait or use VIP access..." style="resize:vertical; margin-bottom:16px;"></textarea>
+
+        <button class="btn btn-primary" onclick="saveSystemSettings()" style="width:100%;">💾 Save Settings</button>
+      </div>
+
+      <!-- System Maintenance Mode -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">System Maintenance Mode</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <span class="field-label" style="margin-bottom: 0;">Status:</span>
+          <span id="maintenance-badge" class="pill pill-green">Inactive</span>
         </div>
-        <div style="flex:1">
-          <label class="field-label">Seek Backtrack (s)</label>
-          <input id="setting-seek-offset" class="text-input" type="number" placeholder="2"/>
+        <label class="field-label">Custom Maintenance Message</label>
+        <textarea id="maintenance-msg-input" class="text-input" rows="3" placeholder="We are currently conducting scheduled maintenance. Please check back shortly!" style="resize: vertical; margin-bottom: 16px;"></textarea>
+        <button class="btn btn-danger" id="maintenance-toggle-btn" onclick="toggleMaintenance()" style="width:100%;">🚨 Toggle Maintenance Mode</button>
+      </div>
+
+      <!-- Admin Account Credentials -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">recu.me Session Account <span style="color:#10b981;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Autologin credentials</span></div>
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#6ee7b7;line-height:1.6">
+          🔑 Server logs into this account automatically to process premium requests.
+        </div>
+        <label class="field-label">recu.me Email</label>
+        <input id="cred-email" class="text-input" type="email" placeholder="your@email.com"/>
+        <label class="field-label">recu.me Password</label>
+        <input id="cred-pass" class="text-input" type="password" placeholder="Your recu.me password"/>
+        <button class="btn btn-primary" onclick="saveCreds()" style="width:100%;">💾 Save Credentials</button>
+        <div id="cred-status" style="font-size:12px;margin-top:10px;display:none"></div>
+      </div>
+
+      <!-- Upload API Configuration -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Upload API Configuration <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Cloud Hosts</span></div>
+        <label class="field-label">DoodAPI Key</label>
+        <input id="upload-api-key" class="text-input" type="text" placeholder="Enter DoodAPI Key"/>
+        
+        <label class="field-label" style="margin-top:10px">KrakenFiles API Key</label>
+        <input id="upload-api-key-2" class="text-input" type="text" placeholder="Enter KrakenFiles API Key"/>
+        
+        <button class="btn btn-primary" onclick="saveApiKey()" style="margin-top:10px; width:100%;">💾 Save API Keys</button>
+        <div id="api-key-status" style="font-size:12px;margin-top:10px;display:none"></div>
+      </div>
+
+      <!-- System SMTP & Retry Settings -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">System Settings <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— SMTP &amp; Retry</span></div>
+        <label class="field-label">Backlog Retry Interval (minutes)</label>
+        <input id="setting-retry-interval" class="text-input" type="number" placeholder="15" style="margin-bottom:12px;"/>
+        
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <div style="flex:1">
+            <label class="field-label">SMTP Host</label>
+            <input id="setting-smtp-host" class="text-input" type="text" placeholder="smtp.gmail.com" style="margin-bottom:0;"/>
+          </div>
+          <div style="flex:1">
+            <label class="field-label">SMTP Port</label>
+            <input id="setting-smtp-port" class="text-input" type="number" placeholder="465" style="margin-bottom:0;"/>
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <div style="flex:1">
+            <label class="field-label">SMTP User</label>
+            <input id="setting-smtp-user" class="text-input" type="text" placeholder="email@gmail.com" style="margin-bottom:0;"/>
+          </div>
+          <div style="flex:1">
+            <label class="field-label">SMTP Password</label>
+            <input id="setting-smtp-pass" class="text-input" type="password" placeholder="App Password" style="margin-bottom:0;"/>
+          </div>
+        </div>
+        
+        <label class="field-label">Download Start Popup Message</label>
+        <textarea id="setting-download-start-msg" class="text-input" rows="2" placeholder="Your video will be downloaded in a few minutes..." style="resize:vertical; margin-bottom:12px;"></textarea>
+
+        <label class="field-label">Failed Download Persistent Message</label>
+        <textarea id="setting-failed-msg" class="text-input" rows="2" placeholder="The download failed now but will resume shortly..." style="resize:vertical; margin-bottom:12px;"></textarea>
+        
+        <label class="field-label">Successful Download Email Message</label>
+        <textarea id="setting-success-email-msg" class="text-input" rows="2" placeholder="Your requested video has been successfully downloaded by Ekkoscope." style="resize:vertical; margin-bottom:12px;"></textarea>
+
+        <label class="field-label">Thumbnail GIF Duration (seconds)</label>
+        <input id="setting-gif-duration" class="text-input" type="number" placeholder="3" style="margin-bottom:16px;"/>
+
+        <button class="btn btn-primary" onclick="saveSystemSettings()" style="width:100%;">💾 Save SMTP Settings</button>
+        <div id="sys-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
+        
+        <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:20px">
+          <button class="btn btn-sm" style="background:rgba(244,63,94,0.1);color:#fca5a5;border:1px solid rgba(244,63,94,0.3); width: 100%;" onclick="window.location.href='/api/admin/backlog/export?token='+adminToken">📥 Download Failed Backlog (CSV)</button>
         </div>
       </div>
-      <button class="btn btn-primary" onclick="savePerformanceSettings()" style="margin-top:10px">💾 Save Performance Tuning</button>
-      <div id="perf-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
+
+      <!-- Performance Tuning -->
+      <div class="card" style="width:100%;">
+        <div class="card-title">Performance Tuning <span style="color:#f97316;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Speed Tuning</span></div>
+        <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.15);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:#fdba74;line-height:1.6">
+          ⚠️ Warning: Aggressive downloaders can crash the video player. Defaults: Interval=500, Buffer=8, Backtrack=2.
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <div style="flex:1">
+            <label class="field-label">Polling (ms)</label>
+            <input id="setting-seek-interval" class="text-input" type="number" placeholder="500" style="margin-bottom:0;"/>
+          </div>
+          <div style="flex:1">
+            <label class="field-label">Buffer (s)</label>
+            <input id="setting-buffer-margin" class="text-input" type="number" placeholder="8" style="margin-bottom:0;"/>
+          </div>
+          <div style="flex:1">
+            <label class="field-label">Backtrack (s)</label>
+            <input id="setting-seek-offset" class="text-input" type="number" placeholder="2" style="margin-bottom:0;"/>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="savePerformanceSettings()" style="width:100%;">💾 Save Tuning</button>
+        <div id="perf-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
+      </div>
+
     </div>
 
-    <!-- System Settings (Backlog & Email) -->
-    <div class="card">
-      <div class="card-title">System Settings <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-Retry & Email</span></div>
-      <label class="field-label">Backlog Retry Interval (minutes)</label>
-      <input id="setting-retry-interval" class="text-input" type="number" placeholder="15"/>
-      <div style="display:flex;gap:10px;margin-bottom:0">
-        <div style="flex:1">
-          <label class="field-label">SMTP Host</label>
-          <input id="setting-smtp-host" class="text-input" type="text" placeholder="smtp.gmail.com"/>
-        </div>
-        <div style="flex:1">
-          <label class="field-label">SMTP Port</label>
-          <input id="setting-smtp-port" class="text-input" type="number" placeholder="465"/>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;margin-bottom:0">
-        <div style="flex:1">
-          <label class="field-label">SMTP User</label>
-          <input id="setting-smtp-user" class="text-input" type="text" placeholder="email@gmail.com"/>
-        </div>
-        <div style="flex:1">
-          <label class="field-label">SMTP Password</label>
-          <input id="setting-smtp-pass" class="text-input" type="password" placeholder="App Password"/>
-        </div>
-      </div>
-      <label class="field-label" style="margin-top:10px">Download Start Popup Message</label>
-      <textarea id="setting-download-start-msg" class="text-input" rows="2" placeholder="Your video will be downloaded in a few minutes..." style="resize:vertical"></textarea>
-
-      <label class="field-label" style="margin-top:10px">Failed Download Persistent Message</label>
-      <textarea id="setting-failed-msg" class="text-input" rows="2" placeholder="The download failed now but will resume shortly..." style="resize:vertical"></textarea>
-      
-      <label class="field-label" style="margin-top:10px">Successful Download Email Message</label>
-      <textarea id="setting-success-email-msg" class="text-input" rows="2" placeholder="Your requested video has been successfully downloaded by Ekkoscope." style="resize:vertical"></textarea>
-
-      <label class="field-label" style="margin-top:10px">Thumbnail GIF Duration (seconds)</label>
-      <input id="setting-gif-duration" class="text-input" type="number" placeholder="3"/>
-
-      <button class="btn btn-primary" onclick="saveSystemSettings()" style="margin-top: 10px;">💾 Save System Settings</button>
-      <div id="sys-settings-status" style="font-size:12px;margin-top:10px;display:none"></div>
-      
-      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:20px">
-        <button class="btn btn-sm" style="background:rgba(244,63,94,0.1);color:#fca5a5;border:1px solid rgba(244,63,94,0.3)" onclick="window.location.href='/api/admin/backlog/export?token='+adminToken">📥 Download Failed Backlog (CSV)</button>
-      </div>
-    </div>
-
-    <!-- Backlog -->
-    <div class="card admin-grid-full">
-      <div class="card-title">Failed Backlog <span style="color:#6366f1;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0">— Auto-retrying jobs</span></div>
-      <div class="table-container" style="overflow:visible">
-        <table class="custom-table" id="table-backlog">
-          <thead><tr><th>Date</th><th>User Email</th><th>Video URL</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Bypass code -->
-    <div class="card">
-      <div class="card-title">Bypass Code</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Share this code with paying users to bypass the paywall (set in your .env file).</p>
-      <div class="bypass-badge" id="bypass-code-display">Loading...</div>
-    </div>
-
-    <!-- Active jobs -->
-    <div class="card admin-grid-full">
-      <div class="card-title">Active Jobs</div>
-      <div id="jobs-table-wrap" class="table-container">
-        <p style="color:var(--muted);font-size:13px">No active jobs.</p>
-      </div>
-    </div>
-
-    <a href="/" class="nav-link admin-grid-full">← Back to User Page</a>
+    <a href="/" class="nav-link col-12" style="text-align:center; justify-content:center; margin-top:24px;">← Back to User Page</a>
   </div>
 </div>
 
@@ -280,13 +373,14 @@
     
     <div style="display:flex;gap:10px;margin-top:10px">
       <button class="btn btn-primary" onclick="submitFulfill()">✅ Mark as Ready</button>
-      <button class="btn" style="background:rgba(255,255,255,0.1);color:#fff" onclick="document.getElementById('fulfill-modal').style.display='none'">Cancel</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('fulfill-modal').style.display='none'">Cancel</button>
     </div>
   </div>
 </div>
 
 <script>
 let adminToken = null;
+let currentMaintenanceMode = '0';
 
 async function doLogin() {
   const pass = document.getElementById('admin-pass').value;
@@ -334,7 +428,7 @@ async function loadStatus() {
     wrap.innerHTML = '<p style="color:var(--muted);font-size:13px">No active jobs.</p>';
     return;
   }
-  wrap.innerHTML = `<table class="custom-table">
+  wrap.innerHTML = `<table class="custom-table" style="min-width: 100%;">
     <thead><tr><th>ID</th><th>Status</th><th>Progress</th><th>Mode</th><th>Chunks</th></tr></thead>
     <tbody>${data.activeJobs.map(j => `
       <tr>
@@ -404,10 +498,11 @@ async function saveCreds() {
 }
 
 async function loadAnalytics() {
-  const [analyticsRes, settingsRes, backlogRes] = await Promise.all([
+  const [analyticsRes, settingsRes, backlogRes, usersRes] = await Promise.all([
     fetch('/api/admin/analytics?token='+adminToken),
     fetch('/api/admin/settings?token='+adminToken),
-    fetch('/api/admin/backlog?token='+adminToken)
+    fetch('/api/admin/backlog?token='+adminToken),
+    fetch('/api/admin/users?token='+adminToken)
   ]);
   if (analyticsRes.ok) {
     const data = await analyticsRes.json();
@@ -432,6 +527,26 @@ async function loadAnalytics() {
     document.getElementById('setting-seek-interval').value = data.seek_interval || '500';
     document.getElementById('setting-buffer-margin').value = data.buffer_margin || '8';
     document.getElementById('setting-seek-offset').value = data.seek_offset || '2';
+    document.getElementById('setting-max-users').value = data.max_concurrent_users || '5';
+    document.getElementById('setting-queue-msg').value = data.queue_message || 'The site is currently full. Please wait or use VIP access.';
+    document.getElementById('setting-force-queue').checked = data.force_queue === '1';
+
+    // Maintenance Settings
+    currentMaintenanceMode = data.maintenance_mode || '0';
+    document.getElementById('maintenance-msg-input').value = data.maintenance_msg || '';
+    const maintBadge = document.getElementById('maintenance-badge');
+    const maintBtn = document.getElementById('maintenance-toggle-btn');
+    if (currentMaintenanceMode === '1') {
+      maintBadge.textContent = 'Active';
+      maintBadge.className = 'pill pill-red';
+      maintBtn.textContent = '✅ Disable Maintenance Mode';
+      maintBtn.className = 'btn btn-ghost';
+    } else {
+      maintBadge.textContent = 'Inactive';
+      maintBadge.className = 'pill pill-green';
+      maintBtn.textContent = '🚨 Enable Maintenance Mode';
+      maintBtn.className = 'btn btn-danger';
+    }
   }
   if (backlogRes.ok) {
     const data = await backlogRes.json();
@@ -448,6 +563,84 @@ async function loadAnalytics() {
     if(data.backlog.length === 0) {
       document.querySelector('#table-backlog tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No backlog items.</td></tr>`;
     }
+  }
+  if (usersRes.ok) {
+    const data = await usersRes.json();
+    renderUsersTable(data.users);
+  }
+}
+
+function renderUsersTable(users) {
+  const tbody = document.querySelector('#table-users tbody');
+  if (!users || users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No registered users found.</td></tr>`;
+    return;
+  }
+  
+  tbody.innerHTML = users.map(user => `
+    <tr>
+      <td>${new Date(user.created_at).toLocaleString()}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">${user.id.slice(0,8)}...</td>
+      <td>${user.email}</td>
+      <td style="font-weight:800;color:var(--yellow-text)">🪙 ${user.coins || 0}</td>
+      <td>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="number" id="coin-input-${user.id}" class="text-input" placeholder="Amount" style="width:80px;padding:6px 10px;margin-bottom:0;font-size:12px;border-radius:8px;" />
+          <button class="btn btn-primary btn-sm" style="padding:6px 12px;font-size:12px;border-radius:8px;" onclick="creditCoins('${user.id}')">➕ Credit</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function creditCoins(userId) {
+  const input = document.getElementById(`coin-input-${userId}`);
+  const amount = parseInt(input.value, 10);
+  if (isNaN(amount) || amount === 0) {
+    alert("Please enter a valid non-zero amount of coins to credit.");
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/users/add-coins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: adminToken, userId, amount })
+    });
+    if (res.ok) {
+      input.value = '';
+      await loadAnalytics(); // reload tables
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to credit coins');
+    }
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  }
+}
+
+async function toggleMaintenance() {
+  const newMode = currentMaintenanceMode === '1' ? '0' : '1';
+  const msg = document.getElementById('maintenance-msg-input').value.trim();
+  const btn = document.getElementById('maintenance-toggle-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: adminToken, maintenance_mode: newMode, maintenance_msg: msg })
+    });
+    if (res.ok) {
+      currentMaintenanceMode = newMode;
+      await loadAnalytics();
+    } else {
+      const errData = await res.json();
+      alert(errData.error || 'Failed to update maintenance settings');
+    }
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -530,10 +723,13 @@ async function saveSystemSettings() {
   const download_start_msg = document.getElementById('setting-download-start-msg').value;
   const success_email_msg = document.getElementById('setting-success-email-msg').value;
   const gif_duration = document.getElementById('setting-gif-duration').value;
+  const max_concurrent_users = document.getElementById('setting-max-users').value;
+  const queue_message = document.getElementById('setting-queue-msg').value;
+  const force_queue = document.getElementById('setting-force-queue').checked ? '1' : '0';
 
   const res = await fetch('/api/admin/settings', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ token: adminToken, retry_interval, smtp_host, smtp_port, smtp_user, smtp_pass, failed_download_msg, download_start_msg, success_email_msg, gif_duration })
+    body: JSON.stringify({ token: adminToken, retry_interval, smtp_host, smtp_port, smtp_user, smtp_pass, failed_download_msg, download_start_msg, success_email_msg, gif_duration, max_concurrent_users, queue_message, force_queue })
   });
   const data = await res.json();
   const msg = document.getElementById('sys-settings-status');
@@ -556,6 +752,13 @@ loadStatus = async function() {
   await loadAnalytics();
 };
 
+// Theme Toggle Event Listener
+document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('ekko_theme', newTheme);
+});
 </script>
 </body>
 </html>
